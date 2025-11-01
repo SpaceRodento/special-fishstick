@@ -35,13 +35,13 @@ HardwareSerial LoRaSerial(1);
 // =============== AT COMMAND FUNCTION ================================
 inline String sendLoRaCommand(String command, int timeout = 500) {
   LoRaSerial.println(command);
-  
+
   Serial.print("[LoRa TX] ");
   Serial.println(command);
-  
+
   unsigned long start = millis();
   String response = "";
-  
+
   while (millis() - start < timeout) {
     if (LoRaSerial.available()) {
       char c = LoRaSerial.read();
@@ -49,15 +49,44 @@ inline String sendLoRaCommand(String command, int timeout = 500) {
       if (c == '\n' && response.length() > 2) break;
     }
   }
-  
+
   response.trim();
-  
+
   if (response.length() > 0) {
     Serial.print("[LoRa RX] ");
     Serial.println(response);
   }
-  
+
   return response;
+}
+
+// Helper: Clear serial buffer and wait for READY signal
+inline void waitForReady(int timeout = 5000) {
+  Serial.println("Waiting for +READY signal...");
+  unsigned long start = millis();
+  String buffer = "";
+
+  while (millis() - start < timeout) {
+    if (LoRaSerial.available()) {
+      char c = LoRaSerial.read();
+      buffer += c;
+
+      // Check if we got READY signal
+      if (buffer.indexOf("READY") >= 0) {
+        Serial.println("✓ Module ready!");
+        delay(100);
+        // Clear any remaining data
+        while (LoRaSerial.available()) LoRaSerial.read();
+        return;
+      }
+
+      // Keep buffer size manageable
+      if (buffer.length() > 50) {
+        buffer = buffer.substring(buffer.length() - 30);
+      }
+    }
+  }
+  Serial.println("⚠ READY signal timeout (continuing anyway)");
 }
 
 // =============== INITIALIZE LoRa ================================
@@ -65,53 +94,70 @@ inline bool initLoRa(uint8_t myAddress, uint8_t networkID) {
   Serial.println("\n============================");
   Serial.println("=== RYLR896 Init ===");
   Serial.println("============================");
-  
+
   // Start serial connection
   LoRaSerial.begin(LORA_BAUDRATE, SERIAL_8N1, RXD2, TXD2);
-  delay(1000);
-  
+  delay(500);
+
+  // Clear any old data
+  while (LoRaSerial.available()) LoRaSerial.read();
+
   // CRITICAL: Reset module first!
   Serial.println("Resetting module...");
-  sendLoRaCommand("AT+RESET");
-  delay(2000);  // Wait for reset
-  
+  sendLoRaCommand("AT+RESET", 1000);
+
+  // Wait for READY signal
+  waitForReady(3000);
+
   // Test communication
   Serial.println("Testing connection...");
-  String response = sendLoRaCommand("AT");
-  if (response.indexOf("OK") < 0) {
-    Serial.println("❌ No response!");
-    return false;
+  String response = sendLoRaCommand("AT", 1000);
+
+  // Check for +OK (note the plus sign!)
+  if (response.indexOf("+OK") < 0 && response.indexOf("OK") < 0) {
+    Serial.println("❌ No response from module!");
+    Serial.print("Got: '");
+    Serial.print(response);
+    Serial.println("'");
+
+    // Try one more time
+    Serial.println("Retrying...");
+    delay(500);
+    response = sendLoRaCommand("AT", 1000);
+    if (response.indexOf("OK") < 0) {
+      return false;
+    }
   }
   Serial.println("✓ Connected");
-  
+
   // Get version
-  response = sendLoRaCommand("AT+VER?");
-  
+  response = sendLoRaCommand("AT+VER?", 1000);
+
   // Set address
   Serial.print("Setting address to ");
   Serial.print(myAddress);
   Serial.println("...");
-  response = sendLoRaCommand("AT+ADDRESS=" + String(myAddress));
+  response = sendLoRaCommand("AT+ADDRESS=" + String(myAddress), 1000);
   if (response.indexOf("OK") < 0) {
     Serial.println("❌ Address failed!");
     return false;
   }
   Serial.println("✓ Address set");
-  
+
   // Set network ID
   Serial.print("Setting network ID to ");
   Serial.print(networkID);
   Serial.println("...");
-  response = sendLoRaCommand("AT+NETWORKID=" + String(networkID));
+  response = sendLoRaCommand("AT+NETWORKID=" + String(networkID), 1000);
   if (response.indexOf("OK") < 0) {
     Serial.println("❌ Network ID failed!");
     return false;
   }
   Serial.println("✓ Network ID set");
-  
+
   // Set parameters (SF12 = max range, works reliably)
   Serial.println("Setting parameters...");
-  response = sendLoRaCommand("AT+PARAMETER=12,7,1,4");
+  response = sendLoRaCommand("AT+PARAMETER=12,7,1,4", 1000);
   if (response.indexOf("OK") >= 0) {
     Serial.println("✓ Parameters: SF12, BW125kHz");
   }
