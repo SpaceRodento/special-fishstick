@@ -1,10 +1,14 @@
-# RYLR896 LoRa - Yksinkertainen Testi
+# RYLR896 LoRa - Automaattinen Lähetin/Vastaanotin
 
 ## 🎯 Tarkoitus
 Hyvin yksinkertainen koodi, jolla testataan että viesti kulkee ESP32:n ja RYLR896 LoRa-moduulin kautta toiselta laitteelta toiselle.
 
+**✨ ERIKOISUUS: KOODI ON IDENTTINEN MOLEMMISSA LAITTEISSA!**
+Rooli (lähettäjä/vastaanottaja) määräytyy automaattisesti hyppylangalla.
+
 ## 🔌 Kytkennät
 
+### LoRa-moduuli:
 ```
 RYLR896    ->   ESP32
 --------------------------
@@ -14,40 +18,51 @@ VCC        ->   3.3V
 GND        ->   GND
 ```
 
+### Roolin määritys (HYPPYLANKA):
+```
+GPIO 4 -> GND        = LÄHETTÄJÄ (osoite 1)
+GPIO 4 -> IRTI       = VASTAANOTTAJA (osoite 2)
+```
+
 ## ⚙️ Käyttöönotto
 
 ### 1. ENSIMMÄINEN LAITE (Lähettäjä)
 
-Avaa `RYLR896_simple.ino` ja aseta:
+1. Kytke RYLR896 moduuli ESP32:een
+2. **Kytke GPIO 4 -> GND hyppylangalla**
+3. Lataa `RYLR896_simple.ino` ESP32:lle
+4. Avaa Serial Monitor (115200 baud)
 
-```cpp
-bool LAHETYS_TILA = true;   // LÄHETTÄJÄ
-#define LORA_ADDRESS 1      // Tämän laitteen osoite
-#define TARGET_ADDRESS 2    // Kohde (vastaanottaja)
-```
+Laite tunnistaa automaattisesti:
+- Rooli: LÄHETTÄJÄ
+- Osoite: 1
+- Kohde: 2
 
 ### 2. TOINEN LAITE (Vastaanottaja)
 
-Avaa `RYLR896_simple.ino` ja aseta:
+1. Kytke RYLR896 moduuli ESP32:een
+2. **Jätä GPIO 4 irti (ei hyppylankaa)**
+3. Lataa **SAMA** `RYLR896_simple.ino` ESP32:lle
+4. Avaa Serial Monitor (115200 baud)
 
-```cpp
-bool LAHETYS_TILA = false;  // VASTAANOTTAJA
-#define LORA_ADDRESS 2      // Tämän laitteen osoite
-#define TARGET_ADDRESS 1    // (ei käytetä vastaanottajassa)
-```
-
-### 3. Lataa koodi molempiin ESP32:iin
-
-### 4. Avaa Serial Monitor (115200 baud)
+Laite tunnistaa automaattisesti:
+- Rooli: VASTAANOTTAJA
+- Osoite: 2
+- Kuuntelee: Lähettäjältä 1
 
 ## 📡 Mitä pitäisi tapahtua
 
 **LÄHETTÄJÄ näyttää:**
 ```
 =================================
-RYLR896 LoRa Testi
-TILA: LÄHETTÄJÄ
-Lähettää viestejä 5 sekunnin välein
+RYLR896 LoRa - Automaattinen
+=================================
+GPIO 4 tila: LOW (GND)
+---------------------------------
+ROOLI: LÄHETTÄJÄ
+Toiminta: Lähettää viestejä 5s välein
+Oma osoite: 1
+Kohde: 2
 =================================
 
 --- LÄHETETÄÄN VIESTI ---
@@ -60,9 +75,13 @@ LoRa: +OK
 **VASTAANOTTAJA näyttää:**
 ```
 =================================
-RYLR896 LoRa Testi
-TILA: VASTAANOTTAJA
-Kuuntelee viestejä...
+RYLR896 LoRa - Automaattinen
+=================================
+GPIO 4 tila: HIGH (irti)
+---------------------------------
+ROOLI: VASTAANOTTAJA
+Toiminta: Kuuntelee viestejä
+Oma osoite: 2
 =================================
 
 === VIESTI VASTAANOTETTU ===
@@ -74,34 +93,42 @@ SNR: 10
 ============================
 ```
 
-## 🔧 Tärkein muuttuja
+## 🔧 Roolin vaihto
 
-**`LAHETYS_TILA`** - Ainoa muuttuja jota tarvitsee muuttaa!
+**EI TARVITSE MUUTTAA KOODIA!**
 
-```cpp
-bool LAHETYS_TILA = true;   // Lähettäjä
-bool LAHETYS_TILA = false;  // Vastaanottaja
-```
+Rooli vaihtuu yksinkertaisesti:
+- **GPIO 4 -> GND** = Lähettäjä
+- **GPIO 4 -> IRTI** = Vastaanottaja
 
-## 📝 Muut asetukset
+Koodi on identtinen molemmissa laitteissa!
 
-- **LORA_ADDRESS**: Tämän laitteen osoite (1 tai 2)
-- **LORA_NETWORK**: Verkko-ID, pidä sama molemmissa (oletus: 6)
-- **TARGET_ADDRESS**: Minne lähetetään (vain lähettäjällä)
+## 📝 Asetukset
+
+- **ROLE_PIN (GPIO 4)**: Määrittää roolin automaattisesti
+- **LORA_NETWORK (6)**: Verkko-ID, pidä sama molemmissa
+- **LORA_ADDRESS**: Määräytyy automaattisesti (1=lähettäjä, 2=vastaanottaja)
+- **TARGET_ADDRESS**: Määräytyy automaattisesti vastakkaiseksi
 
 ## 🐛 Vianetsintä
 
-1. **Ei yhteyttä RYLR896:een**
+1. **Väärä rooli tunnistetaan**
+   - Tarkista GPIO 4 kytkentä
+   - Lähettäjä: GPIO 4 pitää olla kytketty GND:hen
+   - Vastaanottaja: GPIO 4 pitää olla irti (ei kytkettynä mihinkään)
+   - Katso Serial Monitor, se näyttää GPIO 4 tilan käynnistyksen yhteydessä
+
+2. **Ei yhteyttä RYLR896:een**
    - Tarkista kytkennät (TX/RX oikein päin!)
    - Tarkista 3.3V jännite
    - Tarkista BAUD rate (115200)
 
-2. **Ei vastaanota viestejä**
-   - Tarkista että LORA_NETWORK on sama molemmissa
-   - Tarkista että LORA_ADDRESS on eri molemmissa
-   - Varmista että toinen on lähettäjä, toinen vastaanottaja
+3. **Ei vastaanota viestejä**
+   - Varmista että molemmat laitteet käyttävät samaa koodia
+   - Tarkista että toisen GPIO 4 on GND:ssä ja toisen irti
+   - Tarkista Serial Monitor molemmista - näkyykö oikeat roolit?
 
-3. **Heikko signaali**
+4. **Heikko signaali**
    - RSSI pitäisi olla -120 ja 0 välillä (lähempänä 0 = parempi)
    - Siirrä laitteita lähemmäksi
    - Varmista että antennit on kunnolla kiinni

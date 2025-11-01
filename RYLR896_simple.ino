@@ -1,20 +1,28 @@
 /*
- * RYLR896 LoRa Moduuli - Yksinkertainen Lähetin/Vastaanotin
+ * RYLR896 LoRa Moduuli - Automaattinen Lähetin/Vastaanotin
+ *
  * ESP32 kytkennät:
  * - RYLR896 TX -> ESP32 GPIO 25 (RX)
  * - RYLR896 RX -> ESP32 GPIO 26 (TX)
  * - RYLR896 VCC -> 3.3V
  * - RYLR896 GND -> GND
+ *
+ * ROOLIN MÄÄRITYS (HYPPYLANKA):
+ * - GPIO 4 -> GND = LÄHETTÄJÄ (Address 1)
+ * - GPIO 4 -> IRTI = VASTAANOTTAJA (Address 2)
+ *
+ * KOODI ON IDENTTINEN MOLEMMISSA LAITTEISSA!
+ * Rooli määräytyy automaattisesti hyppylangalla.
  */
 
 #include <HardwareSerial.h>
 
 // ============================================
-// TÄRKEIN ASETUS: Vaihda tämä muuttuja!
+// ROOLIN MÄÄRITYS HYPPYLANGALLA
 // ============================================
-// true  = LÄHETTÄJÄ (lähettää viestejä)
-// false = VASTAANOTTAJA (kuuntelee viestejä)
-bool LAHETYS_TILA = true;  // <-- VAIHDA TÄMÄ!
+#define ROLE_PIN 4  // GPIO 4 määrittää roolin
+// Pinni GND:ssä (LOW) = LÄHETTÄJÄ (Address 1)
+// Pinni irti (HIGH)   = VASTAANOTTAJA (Address 2)
 // ============================================
 
 // Sarjaportin asetukset RYLR896:lle
@@ -23,9 +31,12 @@ bool LAHETYS_TILA = true;  // <-- VAIHDA TÄMÄ!
 #define BAUD_RATE 115200
 
 // LoRa asetukset
-#define LORA_ADDRESS 1      // Tämän laitteen osoite (vaihda 2, jos toinen laite)
-#define LORA_NETWORK 6      // Verkko-ID (pidä sama molemmissa laitteissa)
-#define TARGET_ADDRESS 2    // Kohde-osoite (minne lähetetään)
+#define LORA_NETWORK 6      // Verkko-ID (sama molemmissa laitteissa)
+
+// Nämä määräytyvät automaattisesti roolin mukaan
+bool LAHETYS_TILA;          // true = lähettäjä, false = vastaanottaja
+int LORA_ADDRESS;           // Tämän laitteen osoite (1 tai 2)
+int TARGET_ADDRESS;         // Kohteen osoite (2 tai 1)
 
 HardwareSerial LoRaSerial(1);  // Käytetään Serial1 porttia
 
@@ -37,16 +48,52 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
+  // ============================================
+  // TUNNISTA ROOLI HYPPYLANGASTA
+  // ============================================
+  // Aseta ROLE_PIN input-tilaan sisäisellä pull-up vastuksella
+  pinMode(ROLE_PIN, INPUT_PULLUP);
+  delay(100);  // Anna pinnin asettua
+
+  // Lue pinnin tila
+  bool pinTila = digitalRead(ROLE_PIN);
+
+  if (pinTila == LOW) {
+    // Pinni on kytketty GND:hen -> LÄHETTÄJÄ
+    LAHETYS_TILA = true;
+    LORA_ADDRESS = 1;
+    TARGET_ADDRESS = 2;
+  } else {
+    // Pinni on irti (pull-up nostaa HIGH) -> VASTAANOTTAJA
+    LAHETYS_TILA = false;
+    LORA_ADDRESS = 2;
+    TARGET_ADDRESS = 1;
+  }
+
+  // ============================================
+  // NÄYTÄ ROOLI JA ASETUKSET
+  // ============================================
   Serial.println("\n\n=================================");
-  Serial.println("RYLR896 LoRa Testi");
+  Serial.println("RYLR896 LoRa - Automaattinen");
   Serial.println("=================================");
+  Serial.print("GPIO ");
+  Serial.print(ROLE_PIN);
+  Serial.print(" tila: ");
+  Serial.println(pinTila == LOW ? "LOW (GND)" : "HIGH (irti)");
+  Serial.println("---------------------------------");
 
   if (LAHETYS_TILA) {
-    Serial.println("TILA: LÄHETTÄJÄ");
-    Serial.println("Lähettää viestejä 5 sekunnin välein");
+    Serial.println("ROOLI: LÄHETTÄJÄ");
+    Serial.println("Toiminta: Lähettää viestejä 5s välein");
+    Serial.print("Oma osoite: ");
+    Serial.println(LORA_ADDRESS);
+    Serial.print("Kohde: ");
+    Serial.println(TARGET_ADDRESS);
   } else {
-    Serial.println("TILA: VASTAANOTTAJA");
-    Serial.println("Kuuntelee viestejä...");
+    Serial.println("ROOLI: VASTAANOTTAJA");
+    Serial.println("Toiminta: Kuuntelee viestejä");
+    Serial.print("Oma osoite: ");
+    Serial.println(LORA_ADDRESS);
   }
   Serial.println("=================================\n");
 
