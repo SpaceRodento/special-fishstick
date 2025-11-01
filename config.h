@@ -1,5 +1,13 @@
 /*=====================================================================
   config.h - Configuration
+
+  All pin definitions and configuration constants for the project.
+
+  Role Detection:
+  - MODE_SELECT_PIN (GPIO15) is read with internal pull-up
+  - MODE_GND_PIN (GPIO17) provides GND reference
+  - When GPIO15 is connected to GPIO17: RECEIVER mode
+  - When GPIO15 is floating: SENDER mode
 =======================================================================*/
 
 #ifndef CONFIG_H
@@ -13,7 +21,7 @@
 
 // =============== MODE DETECTION ================================
 #define MODE_SELECT_PIN 15
-#define MODE_GND_PIN 13
+#define MODE_GND_PIN 17
 
 // =============== LoRa CONFIGURATION ================================
 #define LORA_RECEIVER_ADDRESS 1   // Receiver ID
