@@ -1,14 +1,22 @@
 /*=====================================================================
   Roboter_Gruppe_8_LoRa_Final.ino
-  
+
   Final working version with:
-  - Auto role detection (GPIO15↔GPIO13 jumper)
-  - Working LoRa communication
+  - Auto role detection (GPIO15↔GPIO17 jumper)
+  - Working LoRa communication (RYLR896 module)
   - LCD display on receiver
   - Touch sensor and LED
-  
-  Receiver: GPIO15 connected to GPIO13
-  Sender:   GPIO15 floating
+
+  Hardware Setup:
+  - RYLR896 TX -> ESP32 GPIO25 (RX)
+  - RYLR896 RX -> ESP32 GPIO26 (TX)
+
+  Role Detection:
+  - Receiver: GPIO15 connected to GPIO17 (jumper wire)
+  - Sender:   GPIO15 floating (no connection)
+
+  Both devices run IDENTICAL code!
+  Role is auto-detected based on jumper wire.
 =======================================================================*/
 
 #include <LiquidCrystal_I2C.h>

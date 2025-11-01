@@ -1,7 +1,25 @@
 /*=====================================================================
-  lora_handler.h - RYLR896 LoRa Handler (Working Version)
-  
-  Based on proven working code
+  lora_handler.h - RYLR896 LoRa Handler
+
+  Handles all RYLR896 LoRa module communication.
+  Based on proven working implementation.
+
+  Features:
+  - Reliable AT command interface
+  - Automatic initialization with optimal settings
+  - Message send/receive with error handling
+  - RSSI and SNR monitoring
+
+  Connection:
+  - RYLR896 TX -> ESP32 GPIO25 (RXD2)
+  - RYLR896 RX -> ESP32 GPIO26 (TXD2)
+  - Baudrate: 115200
+
+  LoRa Parameters:
+  - Spreading Factor: 12 (maximum range)
+  - Bandwidth: 125kHz
+  - Coding Rate: 4/5
+  - Preamble: 4
 =======================================================================*/
 
 #ifndef LORA_HANDLER_H
