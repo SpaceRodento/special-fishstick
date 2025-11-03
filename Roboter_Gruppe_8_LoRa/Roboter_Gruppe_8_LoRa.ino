@@ -176,7 +176,7 @@ void updateLCD_Version2_Compact() {
   // Line 1: Signal bar (8 chars) + RSSI + remote spinner
   lcd.setCursor(0, 0);
   lcd.print(getSignalBar(remote.rssi, 8));
-  lcd.print(" ");
+  //lcd.print(" ");
   lcd.print(remote.rssi);
   lcd.print("dB");
   lcd.print(" ");
@@ -193,7 +193,7 @@ void updateLCD_Version2_Compact() {
   lcd.print(local.ledState);
   lcd.print(" R:");
   lcd.print(remote.ledState);
-  lcd.print(" #");
+  lcd.print(" ");
   lcd.print(remote.messageCount % 100);
   lcd.print(" ");
 
@@ -288,7 +288,7 @@ void setup() {
   
   Serial.println("\n\n\n");
   Serial.println("╔════════════════════════════╗");
-  Serial.println("║  ZignalMeister LoRa Final ║");
+  Serial.println("║  ZignalMeister 2000        ║");
   Serial.println("╚════════════════════════════╝");
   
   // Auto-detect role
