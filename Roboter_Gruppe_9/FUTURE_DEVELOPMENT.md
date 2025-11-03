@@ -10,6 +10,9 @@
 - [x] Connection Watchdog & Health Monitoring
 - [x] Packet loss tracking with sequence numbers
 - [x] Automatic connection recovery
+- [x] Kill-Switch (Physical GPIO 13↔14 + Remote CMD:RESTART)
+- [x] PC Data Logging (CSV/JSON + Python scripts)
+- [x] **Bi-directional Communication** (Sender ↔ Receiver)
 
 ---
 
@@ -395,15 +398,16 @@ plt.show()
 
 ## 📋 Implementation Priority
 
-### Immediate (Next Week):
+### Immediate (Completed!):
 1. ✅ Connection Watchdog & Health Monitoring - DONE!
-2. 🔲 Bi-directional Communication
-3. 🔲 Kill-Switch (Physical + Remote)
+2. ✅ Bi-directional Communication - DONE!
+3. ✅ Kill-Switch (Physical + Remote) - DONE!
+4. ✅ USB/Python Data Logging - DONE!
+5. ✅ SQLite Database Storage - DONE!
 
 ### Short-term (Next Month):
-1. 🔲 USB/Python Data Logging
-2. 🔲 Real-time Graphing
-3. 🔲 SQLite Database Storage
+1. 🔲 Real-time Graphing with Matplotlib
+2. 🔲 Advanced Dashboard (Plotly/Dash)
 
 ### Medium-term (1-2 Months):
 1. 🔲 Power Management

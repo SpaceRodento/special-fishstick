@@ -15,9 +15,10 @@ Role (sender/receiver) is automatically detected using a jumper wire:
 
 - **Auto role detection** - No code changes needed between devices
 - **RYLR896 LoRa** communication with proven reliable settings
+- **Bi-directional communication** - Both devices can send AND receive (ACK support)
 - **LCD display** on receiver with 4 different display versions
 - **Connection watchdog** - Automatic state tracking (CONNECTED/WEAK/LOST) and recovery
-- **Kill-switch** - Physical button to restart device (GPIO 13↔14, hold 3s)
+- **Kill-switch** - Physical button to restart device (GPIO 13↔14, hold 3s) + remote commands
 - **PC data logging** - CSV/JSON output for Python data analysis
 - **Dual spinner animations** - Local (fast) and remote (via LoRa) indicators
 - **Touch sensor** and LED status monitoring
@@ -136,6 +137,7 @@ Developed and tested with:
 - **Kill-switch**: GPIO 13↔14, hold 3 seconds to restart device
 - **PC data logging**: CSV/JSON output for Python analysis (see `PC_LOGGING_README.md`)
 - **Connection watchdog**: Automatic state tracking and recovery (see `WATCHDOG_GUIDE.md`)
+- **Bi-directional**: Sender listens for ACK, receiver sends ACK every 5 messages
 
 ## 🔴 Kill-Switch Usage
 

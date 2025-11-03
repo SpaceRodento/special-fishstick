@@ -50,4 +50,9 @@
 #define ENABLE_JSON_OUTPUT false     // Enable JSON data output (alternative format)
 #define DATA_OUTPUT_INTERVAL 2000    // Output interval in ms (2 seconds)
 
+// =============== BI-DIRECTIONAL COMMUNICATION ================================
+#define ENABLE_BIDIRECTIONAL true    // Enable two-way communication
+#define ACK_INTERVAL 5               // Send ACK every N messages (receiver)
+#define LISTEN_TIMEOUT 500           // Time sender listens for response (ms)
+
 #endif // CONFIG_H

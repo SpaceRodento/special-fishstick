@@ -58,6 +58,10 @@ HealthMonitor health;  // Connection watchdog & health monitoring
 unsigned long killSwitchPressStart = 0;
 unsigned long lastKillSwitchDebug = 0;
 
+// Bi-directional communication stats
+int ackReceived = 0;         // Number of ACKs received (sender)
+unsigned long lastAckTime = 0;  // Last ACK timestamp (sender)
+
 // =============== KILL-SWITCH FUNCTIONS ================================
 
 void initKillSwitch() {
@@ -451,8 +455,18 @@ void printStatus() {
     Serial.println("--- SENDER ---");
     Serial.print("Messages TX: ");
     Serial.println(local.messageCount);
+    #if ENABLE_BIDIRECTIONAL
+    Serial.print("ACKs RX: ");
+    Serial.print(ackReceived);
+    if (lastAckTime > 0) {
+      Serial.print(" (last: ");
+      Serial.print((millis() - lastAckTime) / 1000);
+      Serial.print("s ago)");
+    }
+    Serial.println();
+    #endif
   }
-  
+
   Serial.print("Local LED: ");
   Serial.print(local.ledState);
   Serial.print(", Touch: ");
@@ -602,6 +616,31 @@ void loop() {
       // Update health monitoring
       updateRSSI(health, remote.rssi);
       trackPacket(health, remote.sequenceNumber);
+
+      #if ENABLE_BIDIRECTIONAL
+      // Send ACK every ACK_INTERVAL messages
+      if (remote.messageCount % ACK_INTERVAL == 0) {
+        // ACK includes receiver's current state
+        String ackPayload = "ACK," +
+                            String("SEQ:") + String(local.sequenceNumber) +
+                            ",LED:" + String(local.ledState) +
+                            ",TOUCH:" + String(local.touchState) +
+                            ",SPIN:" + String(local.spinnerIndex);
+
+        Serial.print("📤 Sending ACK (#");
+        Serial.print(remote.messageCount);
+        Serial.println(")...");
+
+        delay(50);  // Small delay before sending (LoRa turnaround time)
+        if (sendLoRaMessage(ackPayload, TARGET_LORA_ADDRESS)) {
+          local.messageCount++;
+          local.sequenceNumber++;
+          Serial.println("✓ ACK sent");
+        } else {
+          Serial.println("❌ ACK send failed");
+        }
+      }
+      #endif
     }
 
     // Update connection state (watchdog)
@@ -640,6 +679,32 @@ void loop() {
       if (sendLoRaMessage(payload, TARGET_LORA_ADDRESS)) {
         local.messageCount++;
         local.sequenceNumber++;  // Increment sequence number
+
+        #if ENABLE_BIDIRECTIONAL
+        // Listen for ACK/response for a short time
+        unsigned long listenStart = millis();
+        while (millis() - listenStart < LISTEN_TIMEOUT) {
+          String response;
+          if (receiveLoRaMessage(remote, response)) {
+            // Process received ACK or data
+            if (response.indexOf("ACK") >= 0) {
+              ackReceived++;
+              lastAckTime = millis();
+              Serial.print("✓ ACK #");
+              Serial.print(ackReceived);
+              Serial.print(" received (RSSI: ");
+              Serial.print(remote.rssi);
+              Serial.println(" dBm)");
+              parsePayload(response);  // Parse any data in ACK
+              // Update health monitoring for sender too
+              updateRSSI(health, remote.rssi);
+              trackPacket(health, remote.sequenceNumber);
+            }
+            break;  // Got response, stop listening
+          }
+          delay(10);
+        }
+        #endif
       }
     }
 
