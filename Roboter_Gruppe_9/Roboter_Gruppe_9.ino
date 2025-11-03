@@ -36,9 +36,11 @@
 #include "health_monitor.h"
 
 // =============== KILL-SWITCH CONFIG ================================
+// GPIO 12 is a strapping pin on ESP32 - use GPIO 13 instead!
 #define KILLSWITCH_GND_PIN 14
-#define KILLSWITCH_READ_PIN 12
+#define KILLSWITCH_READ_PIN 13  // Changed from 12 to 13 (safer pin)
 #define KILLSWITCH_HOLD_TIME 3000
+#define KILLSWITCH_DEBUG true    // Enable debug output
 
 // =============== GLOBALS ================================
 bool bRECEIVER = 0;  // Auto-detected
@@ -53,6 +55,7 @@ HealthMonitor health;  // Connection watchdog & health monitoring
 
 // Kill-switch state
 unsigned long killSwitchPressStart = 0;
+unsigned long lastKillSwitchDebug = 0;
 
 // =============== KILL-SWITCH FUNCTIONS ================================
 
@@ -60,19 +63,31 @@ void initKillSwitch() {
   pinMode(KILLSWITCH_GND_PIN, OUTPUT);
   digitalWrite(KILLSWITCH_GND_PIN, LOW);
   pinMode(KILLSWITCH_READ_PIN, INPUT_PULLUP);
-  delay(50);
+  delay(100);  // Longer delay for pin stabilization
 
-  Serial.println("✓ Kill-switch initialized: GPIO12↔14, hold 3s to restart");
+  Serial.println("✓ Kill-switch initialized: GPIO13↔14, hold 3s to restart");
 
   // Test pins immediately
   Serial.print("  GPIO14 (GND): ");
-  Serial.println(digitalRead(KILLSWITCH_GND_PIN) == LOW ? "LOW ✓" : "HIGH ❌");
-  Serial.print("  GPIO12 (READ): ");
-  Serial.println(digitalRead(KILLSWITCH_READ_PIN) == HIGH ? "HIGH ✓ (not pressed)" : "LOW (PRESSED!)");
+  int gpio14 = digitalRead(KILLSWITCH_GND_PIN);
+  Serial.println(gpio14 == LOW ? "LOW ✓" : "HIGH ❌");
+
+  Serial.print("  GPIO13 (READ): ");
+  int gpio13 = digitalRead(KILLSWITCH_READ_PIN);
+  Serial.print(gpio13);
+  Serial.println(gpio13 == HIGH ? " (HIGH ✓ - not pressed)" : " (LOW - PRESSED!)");
 }
 
 void checkKillSwitch() {
   bool pressed = (digitalRead(KILLSWITCH_READ_PIN) == LOW);
+
+  // Debug: Print GPIO state every 2 seconds if debug enabled
+  if (KILLSWITCH_DEBUG && millis() - lastKillSwitchDebug >= 2000) {
+    lastKillSwitchDebug = millis();
+    Serial.print("[KillSwitch Debug] GPIO13: ");
+    Serial.print(digitalRead(KILLSWITCH_READ_PIN));
+    Serial.println(pressed ? " (PRESSED)" : " (released)");
+  }
 
   if (pressed) {
     if (killSwitchPressStart == 0) {
@@ -90,18 +105,7 @@ void checkKillSwitch() {
       Serial.println("🔴 1 more second...");
     }
     else if (pressDuration >= KILLSWITCH_HOLD_TIME) {
-      Serial.println("\n╔════════════════════════════════╗");
-      Serial.println("║  🔴 RESTARTING DEVICE NOW 🔴  ║");
-      Serial.println("╚════════════════════════════════╝\n");
-      Serial.flush();
-      delay(100);
-
-      // Use ESP32 specific restart for reliability
-      #ifdef ESP32
-        esp_restart();
-      #else
-        ESP.restart();
-      #endif
+      executeRestart("Physical kill-switch");
     }
   }
   else {
@@ -109,6 +113,36 @@ void checkKillSwitch() {
       Serial.println("✓ Kill-switch released (no restart)");
       killSwitchPressStart = 0;
     }
+  }
+}
+
+void executeRestart(const char* reason) {
+  Serial.println("\n╔════════════════════════════════╗");
+  Serial.print("║  🔴 RESTART: ");
+  Serial.print(reason);
+  for (int i = strlen(reason); i < 18; i++) Serial.print(" ");
+  Serial.println("║");
+  Serial.println("╚════════════════════════════════╝\n");
+  Serial.flush();
+  delay(100);
+
+  // Use ESP32 specific restart for reliability
+  #ifdef ESP32
+    esp_restart();
+  #else
+    ESP.restart();
+  #endif
+}
+
+void processRemoteKillSwitch(String payload) {
+  // Check for remote kill-switch commands
+  if (payload.indexOf("CMD:RESTART") >= 0) {
+    Serial.println("\n⚠️  REMOTE RESTART COMMAND RECEIVED!");
+    executeRestart("Remote command");
+  }
+  else if (payload.indexOf("CMD:STOP") >= 0) {
+    Serial.println("\n⚠️  REMOTE STOP COMMAND RECEIVED!");
+    Serial.println("(Feature not yet implemented)");
   }
 }
 
