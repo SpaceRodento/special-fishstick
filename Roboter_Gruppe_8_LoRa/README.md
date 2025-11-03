@@ -7,16 +7,18 @@ ESP32-based LoRa communication system using RYLR896 modules with automatic role 
 **IDENTICAL CODE ON BOTH DEVICES!**
 
 Role (sender/receiver) is automatically detected using a jumper wire:
-- **GPIO 15 ↔ GPIO 17 connected** = RECEIVER
-- **GPIO 15 floating** = SENDER
+- **GPIO 16 ↔ GPIO 17 connected** = RECEIVER (jumper wire)
+- **GPIO 16 floating** = SENDER (no connection)
+- **Note:** GPIO 16 and GPIO 17 are physically next to each other on ESP32
 
 ## 🚀 Features
 
 - **Auto role detection** - No code changes needed between devices
 - **RYLR896 LoRa** communication with proven reliable settings
-- **LCD display** on receiver showing local and remote status
+- **LCD display** on receiver with 4 different display versions
+- **Dual spinner animations** - Local (fast) and remote (via LoRa) indicators
 - **Touch sensor** and LED status monitoring
-- **RSSI/SNR** signal quality monitoring
+- **RSSI/SNR** signal quality monitoring (working correctly)
 - **Modular architecture** with clean separation of concerns
 
 ## 📁 Project Structure
@@ -30,9 +32,13 @@ Role (sender/receiver) is automatically detected using a jumper wire:
 - `lora_handler.h` - RYLR896 LoRa communication handler
 - `functions.h` - LCD and helper functions
 
+### Documentation
+- `README.md` - This file, project overview
+- `LCD_VERSIONS.md` - Detailed guide for all 4 LCD display versions
+- `STATUS_SUMMARY.md` - Current project status and features
+
 ### Reference/Testing
 - `RYLR896_simple.ino` - Simple test code for basic LoRa validation
-- `KAYTTOOHJE.md` - Finnish instructions for simple test code
 - `platformio.ini` - PlatformIO configuration
 
 ## 🔌 Hardware Setup
@@ -50,10 +56,12 @@ GND -> GND
 ### Role Detection
 ```
 GPIO 17 (MODE_GND_PIN)    -> Set as OUTPUT LOW (provides GND)
-GPIO 15 (MODE_SELECT_PIN) -> Read with INPUT_PULLUP
+GPIO 16 (MODE_SELECT_PIN) -> Read with INPUT_PULLUP
 
-RECEIVER: Connect GPIO 15 ↔ GPIO 17 with jumper wire
-SENDER:   Leave GPIO 15 floating (no connection)
+RECEIVER: Connect GPIO 16 ↔ GPIO 17 with jumper wire
+SENDER:   Leave GPIO 16 floating (no connection)
+
+Note: GPIO 16 and GPIO 17 are physically next to each other!
 ```
 
 ### Additional Hardware
@@ -67,11 +75,11 @@ SENDER:   Leave GPIO 15 floating (no connection)
    - Use `Roboter_Gruppe_8_LoRa.ino`
 
 2. **Configure Device 1 (Receiver)**
-   - Connect GPIO 15 to GPIO 17 with jumper wire
+   - Connect GPIO 16 to GPIO 17 with jumper wire
    - Connect I2C LCD display
 
 3. **Configure Device 2 (Sender)**
-   - Leave GPIO 15 floating (no jumper)
+   - Leave GPIO 16 floating (no jumper)
 
 4. **Power up and test**
    - Open Serial Monitor (115200 baud) on both devices
@@ -98,6 +106,9 @@ Developed and tested with:
 ## 📝 Notes
 
 - Both devices run **identical code** - role is auto-detected
-- Simple jumper wire determines sender vs receiver role
+- Simple jumper wire determines sender vs receiver role (GPIO 16 ↔ 17)
 - No need to modify code when switching roles
 - Proven reliable LoRa settings based on extensive testing
+- RSSI/SNR parsing fixed to handle comma-separated data correctly
+- 4 LCD display versions available (see `LCD_VERSIONS.md`)
+- Dual spinner animations show local activity (fast) and remote updates (slow)

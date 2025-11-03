@@ -4,10 +4,11 @@
   All pin definitions and configuration constants for the project.
 
   Role Detection:
-  - MODE_SELECT_PIN (GPIO15) is read with internal pull-up
+  - MODE_SELECT_PIN (GPIO16) is read with internal pull-up
   - MODE_GND_PIN (GPIO17) provides GND reference
-  - When GPIO15 is connected to GPIO17: RECEIVER mode
-  - When GPIO15 is floating: SENDER mode
+  - When GPIO16 is connected to GPIO17: RECEIVER mode
+  - When GPIO16 is floating (no connection): SENDER mode
+  - Note: GPIO16 and GPIO17 are physically next to each other
 =======================================================================*/
 
 #ifndef CONFIG_H
@@ -20,7 +21,7 @@
 #define TOUCH_PIN T0
 
 // =============== MODE DETECTION ================================
-#define MODE_SELECT_PIN 15
+#define MODE_SELECT_PIN 16
 #define MODE_GND_PIN 17
 
 // =============== LoRa CONFIGURATION ================================

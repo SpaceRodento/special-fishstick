@@ -12,8 +12,9 @@
   - RYLR896 RX -> ESP32 GPIO26 (TX)
 
   Role Detection:
-  - Receiver: GPIO15 connected to GPIO17 (jumper wire)
-  - Sender:   GPIO15 floating (no connection)
+  - Receiver: GPIO16 connected to GPIO17 (jumper wire)
+  - Sender:   GPIO16 floating (no connection)
+  - Note: GPIO16 and GPIO17 are physically next to each other
 
   Both devices run IDENTICAL code!
   Role is auto-detected based on jumper wire.
@@ -146,16 +147,17 @@ void updateLCD() {
 
 // =============== VERSION 1: WIDE VISUAL BAR ⭐ ================================
 void updateLCD_Version1_WideBar() {
-  // Line 1: Wide signal bar (12 chars) + count
+  // Line 1: Wide signal bar (11 chars) + count + remote spinner
   lcd.setCursor(0, 0);
-  lcd.print(getSignalBar(remote.rssi, 12));  // [████████░░░░]
+  lcd.print(getSignalBar(remote.rssi, 11));  // [███████░░░░]
+  lcd.print(remote.messageCount % 100);  // Max 2 digits
   lcd.print(" ");
-  lcd.print(remote.messageCount % 1000);  // Max 3 digits
 
-  // Clear rest
-  lcd.print("   ");
+  // Remote spinner (received via LoRa, updates slowly)
+  lcd.setCursor(15, 0);
+  lcd.print(spinner.symbols[remote.spinnerIndex]);
 
-  // Line 2: RSSI value + local status + spinner
+  // Line 2: RSSI value + local status + local spinner
   lcd.setCursor(0, 1);
   lcd.print(remote.rssi);
   lcd.print("dB L:");
@@ -164,21 +166,26 @@ void updateLCD_Version1_WideBar() {
   lcd.print(local.touchState);
   lcd.print("  ");
 
+  // Local spinner (fast animation showing system is responsive)
   lcd.setCursor(15, 1);
   lcd.print(spinner.symbols[local.spinnerIndex]);
 }
 
 // =============== VERSION 2: COMPACT ================================
 void updateLCD_Version2_Compact() {
-  // Line 1: Signal bar (8 chars) + RSSI + SNR
+  // Line 1: Signal bar (8 chars) + RSSI + remote spinner
   lcd.setCursor(0, 0);
   lcd.print(getSignalBar(remote.rssi, 8));
   lcd.print(" ");
   lcd.print(remote.rssi);
   lcd.print("dB");
-  lcd.print("   ");
+  lcd.print(" ");
 
-  // Line 2: SNR + status + counter + spinner
+  // Remote spinner (received via LoRa, updates slowly)
+  lcd.setCursor(15, 0);
+  lcd.print(spinner.symbols[remote.spinnerIndex]);
+
+  // Line 2: SNR + status + counter + local spinner
   lcd.setCursor(0, 1);
   lcd.print("S:");
   lcd.print(remote.snr);
@@ -190,6 +197,7 @@ void updateLCD_Version2_Compact() {
   lcd.print(remote.messageCount % 100);
   lcd.print(" ");
 
+  // Local spinner (fast animation showing system is responsive)
   lcd.setCursor(15, 1);
   lcd.print(spinner.symbols[local.spinnerIndex]);
 }
@@ -313,12 +321,12 @@ void setup() {
 
   if (bRECEIVER) {
     Serial.println("\n>>> RECEIVER MODE");
-    Serial.println(">>> Expected: GPIO 15 connected to GPIO 17");
+    Serial.println(">>> Expected: GPIO 16 connected to GPIO 17 (jumper wire)");
     MY_LORA_ADDRESS = LORA_RECEIVER_ADDRESS;
     TARGET_LORA_ADDRESS = LORA_SENDER_ADDRESS;
   } else {
     Serial.println("\n>>> SENDER MODE");
-    Serial.println(">>> Expected: GPIO 15 floating (no connection)");
+    Serial.println(">>> Expected: GPIO 16 floating (no connection)");
     MY_LORA_ADDRESS = LORA_SENDER_ADDRESS;
     TARGET_LORA_ADDRESS = LORA_RECEIVER_ADDRESS;
   }

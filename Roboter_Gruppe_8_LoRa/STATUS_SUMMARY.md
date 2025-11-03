@@ -1,6 +1,6 @@
 # Project Status Summary
 
-**Date:** 2025-11-01
+**Date:** 03.11.2025
 **Branch:** `claude/simple-clean-setup-011CUg3oKd3zHnE7YN4bAM7E`
 **Status:** ✅ ALL CODE CLEAN AND WORKING
 
@@ -12,9 +12,9 @@
 
 | File | Size | Status | Notes |
 |------|------|--------|-------|
-| `Roboter_Gruppe_8_LoRa.ino` | 11KB | ✅ CLEAN | 4 LCD versions, no errors |
-| `config.h` | 1.7KB | ✅ CLEAN | GPIO 15/17 mode detection |
-| `lora_handler.h` | 6.0KB | ✅ CLEAN | LoRa communication working |
+| `Roboter_Gruppe_8_LoRa.ino` | 11KB | ✅ CLEAN | 4 LCD versions, dual spinners |
+| `config.h` | 1.7KB | ✅ CLEAN | GPIO 16/17 mode detection |
+| `lora_handler.h` | 6.0KB | ✅ CLEAN | Fixed RSSI/SNR parsing |
 | `functions.h` | 757B | ✅ CLEAN | LCD init functions |
 | `structs.h` | 1.5KB | ✅ CLEAN | Data structures |
 | `RYLR896_simple.ino` | 7.2KB | ✅ CLEAN | Test/reference code |
@@ -33,31 +33,32 @@
 
 ### 1. LoRa Communication ✅
 - RYLR896 module support
-- Auto role detection (GPIO 15 ↔ 17 jumper)
+- Auto role detection (GPIO 16 ↔ 17 jumper)
 - Reliable message send/receive
-- RSSI and SNR monitoring
+- RSSI and SNR monitoring (fixed parsing bug)
 - Connection timeout warning
 
 ### 2. LCD Display (4 Versions!) ✅
 
 **Version 1: Wide Visual Bar** (DEFAULT) ⭐
 ```
-[████████░░░░] 123
--52dB L:1 T:0   v
+[███████████]12 ^  ← Remote spinner (slow, via LoRa)
+-52dB L:1 T:0   v  ← Local spinner (fast)
 ```
-- 12-character wide signal bar
+- 11-character wide signal bar
 - RSSI in dB
 - Message counter
-- Local status
+- Dual spinners (local + remote)
 
 **Version 2: Compact**
 ```
-[████████] -52dB
-S:8 L:1 R:0 #12v
+[████████] -52dB ^  ← Remote spinner
+S:8 L:1 R:0 #12 v  ← Local spinner
 ```
 - 8-character bar
 - SNR included
 - Both local and remote LED
+- Dual spinners
 
 **Version 3: Detailed**
 ```
@@ -76,9 +77,10 @@ LOC:0 T:1      v
 - No signal info
 
 ### 3. Auto Role Detection ✅
-- GPIO 15 ↔ GPIO 17 jumper = RECEIVER
-- GPIO 15 floating = SENDER
+- GPIO 16 ↔ GPIO 17 jumper = RECEIVER
+- GPIO 16 floating = SENDER
 - Identical code on both devices!
+- GPIO 16 and 17 are physically next to each other (easy connection)
 
 ### 4. Documentation ✅
 - `README.md` - Project overview
@@ -106,10 +108,12 @@ GND -> GND
 ### Mode Detection:
 ```
 GPIO 17 (MODE_GND_PIN)    -> OUTPUT LOW (provides GND)
-GPIO 15 (MODE_SELECT_PIN) -> INPUT_PULLUP
+GPIO 16 (MODE_SELECT_PIN) -> INPUT_PULLUP
 
-RECEIVER: GPIO 15 ↔ GPIO 17 (jumper wire)
-SENDER:   GPIO 15 floating (no jumper)
+RECEIVER: GPIO 16 ↔ GPIO 17 (jumper wire)
+SENDER:   GPIO 16 floating (no jumper)
+
+Note: GPIO 16 and 17 are physically next to each other!
 ```
 
 ### Other:
@@ -187,7 +191,7 @@ The "errors" might have been:
 
 2. **Set Up Hardware:**
    - Connect RYLR896 module
-   - Add jumper for receiver (GPIO 15 ↔ 17)
+   - Add jumper for receiver (GPIO 16 ↔ 17)
    - Or leave floating for sender
 
 3. **Test:**
