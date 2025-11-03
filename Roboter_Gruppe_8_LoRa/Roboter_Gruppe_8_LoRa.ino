@@ -27,6 +27,7 @@
 #include "structs.h"
 #include "functions.h"
 #include "lora_handler.h"
+#include "health_monitor.h"
 
 // =============== GLOBALS ================================
 bool bRECEIVER = 0;  // Auto-detected
@@ -37,6 +38,7 @@ DeviceState local;
 DeviceState remote;
 TimingData timing;
 SpinnerData spinner;
+HealthMonitor health;  // Connection watchdog & health monitoring
 
 // =============== FUNCTIONS ================================
 
@@ -49,23 +51,31 @@ void updateSpinner() {
 }
 
 void parsePayload(String payload) {
-  // Parse: LED:x,TOUCH:x,SPIN:x,COUNT:x
+  // Parse: SEQ:x,LED:x,TOUCH:x,SPIN:x,COUNT:x
+  int seqIdx = payload.indexOf("SEQ:");
   int ledIdx = payload.indexOf("LED:");
   int touchIdx = payload.indexOf("TOUCH:");
   int spinIdx = payload.indexOf("SPIN:");
-  
+
+  // Parse sequence number
+  if (seqIdx >= 0) {
+    int comma = payload.indexOf(',', seqIdx);
+    if (comma < 0) comma = payload.length();
+    remote.sequenceNumber = payload.substring(seqIdx + 4, comma).toInt();
+  }
+
   if (ledIdx >= 0) {
     int comma = payload.indexOf(',', ledIdx);
     if (comma < 0) comma = payload.length();
     remote.ledState = payload.substring(ledIdx + 4, comma).toInt();
   }
-  
+
   if (touchIdx >= 0) {
     int comma = payload.indexOf(',', touchIdx);
     if (comma < 0) comma = payload.length();
     remote.touchState = payload.substring(touchIdx + 6, comma).toInt();
   }
-  
+
   if (spinIdx >= 0) {
     int comma = payload.indexOf(',', spinIdx);
     if (comma < 0) comma = payload.length();
@@ -147,9 +157,13 @@ void updateLCD() {
 
 // =============== VERSION 1: WIDE VISUAL BAR ⭐ ================================
 void updateLCD_Version1_WideBar() {
-  // Line 1: Wide signal bar (11 chars) + count + remote spinner
+  // Line 1: Connection status + signal bar + count + remote spinner
   lcd.setCursor(0, 0);
-  lcd.print(getSignalBar(remote.rssi, 11));  // [███████░░░░]
+
+  // Connection status icon
+  lcd.print(getConnectionIcon(health.state));
+
+  lcd.print(getSignalBar(remote.rssi, 10));  // [██████░░░░] (10 chars to fit status)
   lcd.print(remote.messageCount % 100);  // Max 2 digits
   lcd.print(" ");
 
@@ -173,27 +187,28 @@ void updateLCD_Version1_WideBar() {
 
 // =============== VERSION 2: COMPACT ================================
 void updateLCD_Version2_Compact() {
-  // Line 1: Signal bar (8 chars) + RSSI + remote spinner
+  // Line 1: Connection + signal bar + RSSI + remote spinner
   lcd.setCursor(0, 0);
-  lcd.print(getSignalBar(remote.rssi, 8));
+
+  // Connection status icon
+  lcd.print(getConnectionIcon(health.state));
+
+  lcd.print(getSignalBar(remote.rssi, 7));  // 7 chars to fit status
   lcd.print(" ");
   lcd.print(remote.rssi);
-  lcd.print("dB");
   lcd.print(" ");
 
   // Remote spinner (received via LoRa, updates slowly)
   lcd.setCursor(15, 0);
   lcd.print(spinner.symbols[remote.spinnerIndex]);
 
-  // Line 2: SNR + status + counter + local spinner
+  // Line 2: SNR + packet loss + counter + local spinner
   lcd.setCursor(0, 1);
   lcd.print("S:");
   lcd.print(remote.snr);
   lcd.print(" L:");
-  lcd.print(local.ledState);
-  lcd.print(" R:");
-  lcd.print(remote.ledState);
-  lcd.print(" #");
+  lcd.print((int)getPacketLoss(health), 0);  // Packet loss %
+  lcd.print("% ");
   lcd.print(remote.messageCount % 100);
   lcd.print(" ");
 
@@ -349,9 +364,9 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   
   // Initialize structs
-  local = {LOW, 0, false, 0, 0, 0, 0, 0};
-  remote = {0, 0, 0, 0, 0, 0, 0, 0};
-  timing = {0, 0, 0, 0, 0, 0};
+  local = {LOW, 0, false, 0, 0, 0, 0, 0, 0};     // Added sequenceNumber
+  remote = {0, 0, 0, 0, 0, 0, 0, 0, 0};           // Added sequenceNumber
+  timing = {0, 0, 0, 0, 0, 0, 0};                 // Added lastHealthReport
   spinner = {{'<', '^', '>', 'v'}, 0, 0};
   
   // Initialize LoRa
@@ -365,6 +380,8 @@ void setup() {
     initLCD();
     // Initialize lastMessageTime to current time to prevent false "NO SIGNAL" at startup
     remote.lastMessageTime = millis();
+    // Initialize health monitor
+    initHealthMonitor(health);
   }
 
   Serial.println("\n✓ Setup complete!\n");
@@ -398,30 +415,51 @@ void loop() {
     if (receiveLoRaMessage(remote, payload)) {
       parsePayload(payload);
       remote.messageCount++;
+
+      // Update health monitoring
+      updateRSSI(health, remote.rssi);
+      trackPacket(health, remote.sequenceNumber);
     }
-    
+
+    // Update connection state (watchdog)
+    updateConnectionState(health, remote);
+
+    // Attempt recovery if connection lost
+    if (health.state == CONN_LOST) {
+      attemptRecovery(health, MY_LORA_ADDRESS, LORA_NETWORK_ID);
+    }
+
     updateLCD();
-    
+
     if (millis() - timing.lastCheck >= 5000) {
       timing.lastCheck = millis();
       printStatus();
     }
-    
+
+    // Print health report every 30 seconds
+    if (millis() - timing.lastHealthReport >= 30000) {
+      timing.lastHealthReport = millis();
+      printHealthReport(health, remote);
+    }
+
   } else {
     // SENDER: Send every 2 seconds
     if (millis() - timing.lastSend >= 2000) {
       timing.lastSend = millis();
-      
-      String payload = "LED:" + String(local.ledState) + 
-                       ",TOUCH:" + String(local.touchState) + 
+
+      // Include sequence number in payload
+      String payload = "SEQ:" + String(local.sequenceNumber) +
+                       ",LED:" + String(local.ledState) +
+                       ",TOUCH:" + String(local.touchState) +
                        ",SPIN:" + String(local.spinnerIndex) +
                        ",COUNT:" + String(local.messageCount);
-      
+
       if (sendLoRaMessage(payload, TARGET_LORA_ADDRESS)) {
         local.messageCount++;
+        local.sequenceNumber++;  // Increment sequence number
       }
     }
-    
+
     if (millis() - timing.lastCheck >= 5000) {
       timing.lastCheck = millis();
       printStatus();
