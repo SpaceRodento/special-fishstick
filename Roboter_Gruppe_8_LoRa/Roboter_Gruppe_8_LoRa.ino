@@ -129,11 +129,11 @@ void updateLCD() {
 
     // VERSION 1: WIDE VISUAL BAR + RSSI (RECOMMENDED) ⭐
     // Uncomment this version:
-    updateLCD_Version1_WideBar();
+  //  updateLCD_Version1_WideBar();
 
     // VERSION 2: COMPACT WITH NUMBERS
     // Uncomment this version:
-    // updateLCD_Version2_Compact();
+     updateLCD_Version2_Compact();
 
     // VERSION 3: DETAILED INFO
     // Uncomment this version:
