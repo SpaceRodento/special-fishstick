@@ -139,11 +139,11 @@ void updateLCD() {
 
     // VERSION 1: WIDE VISUAL BAR + RSSI (RECOMMENDED) ⭐
     // Uncomment this version:
-    updateLCD_Version1_WideBar();
+  //  updateLCD_Version1_WideBar();
 
     // VERSION 2: COMPACT WITH NUMBERS
     // Uncomment this version:
-    // updateLCD_Version2_Compact();
+     updateLCD_Version2_Compact();
 
     // VERSION 3: DETAILED INFO
     // Uncomment this version:
@@ -193,8 +193,7 @@ void updateLCD_Version2_Compact() {
   // Connection status icon
   lcd.print(getConnectionIcon(health.state));
 
-  lcd.print(getSignalBar(remote.rssi, 7));  // 7 chars to fit status
-  lcd.print(" ");
+  lcd.print(getSignalBar(remote.rssi, 7));  // 7 chars to fit status icon
   lcd.print(remote.rssi);
   lcd.print(" ");
 
@@ -202,13 +201,15 @@ void updateLCD_Version2_Compact() {
   lcd.setCursor(15, 0);
   lcd.print(spinner.symbols[remote.spinnerIndex]);
 
-  // Line 2: SNR + packet loss + counter + local spinner
+  // Line 2: SNR + local/remote status + counter + local spinner
   lcd.setCursor(0, 1);
   lcd.print("S:");
   lcd.print(remote.snr);
   lcd.print(" L:");
-  lcd.print((int)getPacketLoss(health), 0);  // Packet loss %
-  lcd.print("% ");
+  lcd.print(local.ledState);
+  lcd.print(" R:");
+  lcd.print(remote.ledState);
+  lcd.print(" ");
   lcd.print(remote.messageCount % 100);
   lcd.print(" ");
 
@@ -303,7 +304,7 @@ void setup() {
   
   Serial.println("\n\n\n");
   Serial.println("╔════════════════════════════╗");
-  Serial.println("║  ZignalMeister LoRa Final ║");
+  Serial.println("║  ZignalMeister 2000        ║");
   Serial.println("╚════════════════════════════╝");
   
   // Auto-detect role
