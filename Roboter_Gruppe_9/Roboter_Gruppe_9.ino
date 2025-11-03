@@ -19,8 +19,8 @@
   - Note: GPIO16 and GPIO17 are physically next to each other
 
   Kill-Switch:
-  - GPIO14 = GND, GPIO12 = INPUT_PULLUP
-  - Connect GPIO12↔GPIO14 and hold 3s = restart device
+  - GPIO14 = GND, GPIO13 = INPUT_PULLUP
+  - Connect GPIO13↔GPIO14 and hold 3s = restart device
 
   Both devices run IDENTICAL code!
   Role is auto-detected based on jumper wire.
@@ -28,6 +28,7 @@
 
 #include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
+#include <esp_system.h>  // For esp_restart()
 
 #include "config.h"
 #include "structs.h"
@@ -482,7 +483,9 @@ void setup() {
   // Initialize LoRa
   if (!initLoRa(MY_LORA_ADDRESS, LORA_NETWORK_ID)) {
     Serial.println("\n❌ LoRa init failed!");
-    while(1) delay(1000);
+    Serial.println("⚠️  Continuing anyway - kill-switch still works!");
+    Serial.println("💡 Connect GPIO 13↔14 and hold 3s to restart\n");
+    // Don't freeze - let kill-switch work even if LoRa fails!
   }
   
   // LCD for receiver
@@ -501,6 +504,15 @@ void setup() {
 void loop() {
   // Check kill-switch every loop (highest priority!)
   checkKillSwitch();
+
+  // Debug: Confirm loop is running (only first 5 times)
+  static int loopCounter = 0;
+  if (loopCounter < 5) {
+    loopCounter++;
+    Serial.print("✓ Loop running (");
+    Serial.print(loopCounter);
+    Serial.println("/5)");
+  }
 
   // Spinner
   updateSpinner();
