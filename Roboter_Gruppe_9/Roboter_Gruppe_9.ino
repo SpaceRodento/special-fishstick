@@ -187,6 +187,10 @@ void parsePayload(String payload) {
     int comma = payload.indexOf(',', spinIdx);
     if (comma < 0) comma = payload.length();
     remote.spinnerIndex = payload.substring(spinIdx + 5, comma).toInt();
+    // Bounds check to prevent buffer overflow!
+    if (remote.spinnerIndex < 0 || remote.spinnerIndex >= 4) {
+      remote.spinnerIndex = 0;
+    }
   }
 }
 
@@ -527,11 +531,15 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   
   // Initialize structs
-  local = {LOW, 0, false, 0, 0, 0, 0, 0, 0};     // Added sequenceNumber
-  remote = {0, 0, 0, 0, 0, 0, 0, 0, 0};           // Added sequenceNumber
-  timing = {0, 0, 0, 0, 0, 0, 0, 0};              // Added lastHealthReport, lastDataOutput
+  // DeviceState: ledState, ledCount, touchState, touchValue, messageCount, lastMessageTime, sequenceNumber, spinnerIndex, rssi, snr
+  local = {LOW, 0, false, 0, 0, 0, 0, 0, 0, 0};   // 10 fields - added snr
+  remote = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};         // 10 fields - added snr
+  timing = {0, 0, 0, 0, 0, 0, 0, 0};               // 8 fields
   spinner = {{'<', '^', '>', 'v'}, 0, 0};
   
+  // Initialize health monitor (BOTH roles - needed for PC data logging!)
+  initHealthMonitor(health);
+
   // Initialize LoRa
   if (!initLoRa(MY_LORA_ADDRESS, LORA_NETWORK_ID)) {
     Serial.println("\n❌ LoRa init failed!");
@@ -539,14 +547,12 @@ void setup() {
     Serial.println("💡 Connect GPIO 13↔14 and hold 3s to restart\n");
     // Don't freeze - let kill-switch work even if LoRa fails!
   }
-  
+
   // LCD for receiver
   if (bRECEIVER) {
     initLCD();
     // Initialize lastMessageTime to current time to prevent false "NO SIGNAL" at startup
     remote.lastMessageTime = millis();
-    // Initialize health monitor
-    initHealthMonitor(health);
   }
 
   Serial.println("\n✓ Setup complete!\n");

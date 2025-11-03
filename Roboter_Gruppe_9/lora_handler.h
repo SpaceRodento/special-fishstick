@@ -191,8 +191,21 @@ inline bool receiveLoRaMessage(DeviceState& remote, String& payload) {
   if (!LoRaSerial.available()) {
     return false;
   }
-  
-  String response = LoRaSerial.readStringUntil('\n');
+
+  // Read with timeout to avoid blocking (readStringUntil has 1s default timeout)
+  // Manual read is faster and more responsive
+  String response = "";
+  unsigned long start = millis();
+  while (millis() - start < 100) {  // 100ms timeout
+    if (LoRaSerial.available()) {
+      char c = LoRaSerial.read();
+      if (c == '\n' || c == '\r') {
+        if (response.length() > 0) break;  // Got complete line
+      } else {
+        response += c;
+      }
+    }
+  }
   response.trim();
   
   // Check if it's a received message
