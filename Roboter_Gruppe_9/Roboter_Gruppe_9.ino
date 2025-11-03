@@ -1,10 +1,12 @@
 /*=====================================================================
-  Roboter_Gruppe_8_LoRa_Final.ino
+  Roboter_Gruppe_9.ino
 
-  Final working version with:
-  - Auto role detection (GPIO15↔GPIO17 jumper)
+  Full-featured version with:
+  - Auto role detection (GPIO16↔GPIO17 jumper)
   - Working LoRa communication (RYLR896 module)
-  - LCD display on receiver
+  - LCD display on receiver (4 versions)
+  - Connection watchdog & health monitoring
+  - Kill-switch (GPIO12↔GPIO14, hold 3s = restart)
   - Touch sensor and LED
 
   Hardware Setup:
@@ -15,6 +17,10 @@
   - Receiver: GPIO16 connected to GPIO17 (jumper wire)
   - Sender:   GPIO16 floating (no connection)
   - Note: GPIO16 and GPIO17 are physically next to each other
+
+  Kill-Switch:
+  - GPIO14 = GND, GPIO12 = INPUT_PULLUP
+  - Connect GPIO12↔GPIO14 and hold 3s = restart device
 
   Both devices run IDENTICAL code!
   Role is auto-detected based on jumper wire.
@@ -29,6 +35,11 @@
 #include "lora_handler.h"
 #include "health_monitor.h"
 
+// =============== KILL-SWITCH CONFIG ================================
+#define KILLSWITCH_GND_PIN 14
+#define KILLSWITCH_READ_PIN 12
+#define KILLSWITCH_HOLD_TIME 3000
+
 // =============== GLOBALS ================================
 bool bRECEIVER = 0;  // Auto-detected
 uint8_t MY_LORA_ADDRESS = 0;
@@ -39,6 +50,67 @@ DeviceState remote;
 TimingData timing;
 SpinnerData spinner;
 HealthMonitor health;  // Connection watchdog & health monitoring
+
+// Kill-switch state
+unsigned long killSwitchPressStart = 0;
+
+// =============== KILL-SWITCH FUNCTIONS ================================
+
+void initKillSwitch() {
+  pinMode(KILLSWITCH_GND_PIN, OUTPUT);
+  digitalWrite(KILLSWITCH_GND_PIN, LOW);
+  pinMode(KILLSWITCH_READ_PIN, INPUT_PULLUP);
+  delay(50);
+
+  Serial.println("✓ Kill-switch initialized: GPIO12↔14, hold 3s to restart");
+
+  // Test pins immediately
+  Serial.print("  GPIO14 (GND): ");
+  Serial.println(digitalRead(KILLSWITCH_GND_PIN) == LOW ? "LOW ✓" : "HIGH ❌");
+  Serial.print("  GPIO12 (READ): ");
+  Serial.println(digitalRead(KILLSWITCH_READ_PIN) == HIGH ? "HIGH ✓ (not pressed)" : "LOW (PRESSED!)");
+}
+
+void checkKillSwitch() {
+  bool pressed = (digitalRead(KILLSWITCH_READ_PIN) == LOW);
+
+  if (pressed) {
+    if (killSwitchPressStart == 0) {
+      killSwitchPressStart = millis();
+      Serial.println("\n🔴 Kill-switch PRESSED - hold to restart...");
+    }
+
+    unsigned long pressDuration = millis() - killSwitchPressStart;
+
+    // Show countdown every second
+    if (pressDuration >= 1000 && pressDuration < 1100) {
+      Serial.println("🔴 2 more seconds...");
+    }
+    else if (pressDuration >= 2000 && pressDuration < 2100) {
+      Serial.println("🔴 1 more second...");
+    }
+    else if (pressDuration >= KILLSWITCH_HOLD_TIME) {
+      Serial.println("\n╔════════════════════════════════╗");
+      Serial.println("║  🔴 RESTARTING DEVICE NOW 🔴  ║");
+      Serial.println("╚════════════════════════════════╝\n");
+      Serial.flush();
+      delay(100);
+
+      // Use ESP32 specific restart for reliability
+      #ifdef ESP32
+        esp_restart();
+      #else
+        ESP.restart();
+      #endif
+    }
+  }
+  else {
+    if (killSwitchPressStart > 0) {
+      Serial.println("✓ Kill-switch released (no restart)");
+      killSwitchPressStart = 0;
+    }
+  }
+}
 
 // =============== FUNCTIONS ================================
 
@@ -301,12 +373,15 @@ void printStatus() {
 void setup() {
   Serial.begin(115200);
   delay(2000);
-  
+
   Serial.println("\n\n\n");
   Serial.println("╔════════════════════════════╗");
   Serial.println("║  ZignalMeister 2000        ║");
   Serial.println("╚════════════════════════════╝");
-  
+
+  // Initialize kill-switch first
+  initKillSwitch();
+
   // Auto-detect role
   pinMode(MODE_GND_PIN, OUTPUT);
   digitalWrite(MODE_GND_PIN, LOW);
@@ -390,6 +465,9 @@ void setup() {
 
 // =============== LOOP ================================
 void loop() {
+  // Check kill-switch every loop (highest priority!)
+  checkKillSwitch();
+
   // Spinner
   updateSpinner();
   

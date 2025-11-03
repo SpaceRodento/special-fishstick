@@ -1,6 +1,6 @@
-# Roboter Gruppe 8 - LoRa Communication System
+# Roboter Gruppe 9 - LoRa Communication System
 
-ESP32-based LoRa communication system using RYLR896 modules with automatic role detection.
+ESP32-based LoRa communication system using RYLR896 modules with automatic role detection, connection watchdog, and kill-switch.
 
 ## ✨ Key Features
 
@@ -16,15 +16,19 @@ Role (sender/receiver) is automatically detected using a jumper wire:
 - **Auto role detection** - No code changes needed between devices
 - **RYLR896 LoRa** communication with proven reliable settings
 - **LCD display** on receiver with 4 different display versions
+- **Connection watchdog** - Automatic state tracking (CONNECTED/WEAK/LOST) and recovery
+- **Kill-switch** - Physical button to restart device (GPIO 12↔14, hold 3s)
 - **Dual spinner animations** - Local (fast) and remote (via LoRa) indicators
 - **Touch sensor** and LED status monitoring
 - **RSSI/SNR** signal quality monitoring (working correctly)
+- **Packet loss tracking** with sequence numbers
+- **Health monitoring** - RSSI statistics, packet loss %, uptime tracking
 - **Modular architecture** with clean separation of concerns
 
 ## 📁 Project Structure
 
 ### Main Program
-- `Roboter_Gruppe_8_LoRa.ino` - Main application with auto role detection
+- `Roboter_Gruppe_9.ino` - Main application with auto role detection
 
 ### Header Files
 - `config.h` - Pin definitions and configuration constants
@@ -36,6 +40,8 @@ Role (sender/receiver) is automatically detected using a jumper wire:
 - `README.md` - This file, project overview
 - `LCD_VERSIONS.md` - Detailed guide for all 4 LCD display versions
 - `STATUS_SUMMARY.md` - Current project status and features
+- `WATCHDOG_GUIDE.md` - Connection watchdog and health monitoring guide
+- `FUTURE_DEVELOPMENT.md` - Development roadmap
 
 ### Reference/Testing
 - `RYLR896_simple.ino` - Simple test code for basic LoRa validation
@@ -64,6 +70,14 @@ SENDER:   Leave GPIO 16 floating (no connection)
 Note: GPIO 16 and GPIO 17 are physically next to each other!
 ```
 
+### Kill-Switch
+```
+GPIO 14 (KILLSWITCH_GND_PIN)  -> Set as OUTPUT LOW (provides GND)
+GPIO 12 (KILLSWITCH_READ_PIN) -> Read with INPUT_PULLUP
+
+To restart device: Connect GPIO 12 ↔ GPIO 14 and hold 3 seconds
+```
+
 ### Additional Hardware
 - **LED**: GPIO 2 (built-in LED)
 - **Touch Sensor**: T0 (GPIO 4)
@@ -72,7 +86,7 @@ Note: GPIO 16 and GPIO 17 are physically next to each other!
 ## ⚡ Quick Start
 
 1. **Upload identical code to both ESP32 devices**
-   - Use `Roboter_Gruppe_8_LoRa.ino`
+   - Use `Roboter_Gruppe_9.ino`
 
 2. **Configure Device 1 (Receiver)**
    - Connect GPIO 16 to GPIO 17 with jumper wire
@@ -112,3 +126,32 @@ Developed and tested with:
 - RSSI/SNR parsing fixed to handle comma-separated data correctly
 - 4 LCD display versions available (see `LCD_VERSIONS.md`)
 - Dual spinner animations show local activity (fast) and remote updates (slow)
+- **Kill-switch**: GPIO 12↔14, hold 3 seconds to restart device
+- **Connection watchdog**: Automatic state tracking and recovery (see `WATCHDOG_GUIDE.md`)
+
+## 🔴 Kill-Switch Usage
+
+The kill-switch allows you to restart the device without re-uploading code.
+
+**How to use:**
+1. Connect GPIO 12 to GPIO 14 with a jumper wire (or button)
+2. Hold for 3 seconds
+3. Watch Serial Monitor for countdown
+4. Device restarts automatically
+
+**Serial Monitor output:**
+```
+🔴 Kill-switch PRESSED - hold to restart...
+🔴 2 more seconds...
+🔴 1 more second...
+╔════════════════════════════════╗
+║  🔴 RESTARTING DEVICE NOW 🔴  ║
+╚════════════════════════════════╝
+[Device restarts]
+```
+
+**Use cases:**
+- Emergency stop during testing
+- Quick restart without power cycling
+- Safety feature for robot control
+- Remote restart (future: via LoRa command)
