@@ -216,10 +216,11 @@ inline bool receiveLoRaMessage(DeviceState& remote, String& payload) {
       payload = response.substring(comma2 + 1, comma3);
       String rssiStr = response.substring(comma3 + 1, comma4);
       String snrStr = response.substring(comma4 + 1);
-      
+
       remote.rssi = rssiStr.toInt();
       remote.snr = snrStr.toInt();
-      
+      remote.lastMessageTime = millis();  // Update last message timestamp!
+
       Serial.print("║ From: ");
       Serial.println(sender);
       Serial.print("║ Data: ");
@@ -230,7 +231,7 @@ inline bool receiveLoRaMessage(DeviceState& remote, String& payload) {
       Serial.print("║ SNR:  ");
       Serial.println(remote.snr);
       Serial.println("╚════════════════════════");
-      
+
       return true;
     }
   }

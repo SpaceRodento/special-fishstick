@@ -290,21 +290,52 @@ void setup() {
   delay(100);
   
   bRECEIVER = (digitalRead(MODE_SELECT_PIN) == LOW);
-  
+
+  // ============================================
+  // DEBUG: Show pin state and role detection
+  // ============================================
+  Serial.println("\n╔════════════════════════════╗");
+  Serial.println("║   MODE DETECTION DEBUG    ║");
+  Serial.println("╠════════════════════════════╣");
+  Serial.print("║ MODE_GND_PIN (");
+  Serial.print(MODE_GND_PIN);
+  Serial.println(") -> LOW     ║");
+  Serial.print("║ MODE_SELECT_PIN (");
+  Serial.print(MODE_SELECT_PIN);
+  Serial.print("): ");
+  int pinReading = digitalRead(MODE_SELECT_PIN);
+  if (pinReading == LOW) {
+    Serial.println("LOW  ║");
+  } else {
+    Serial.println("HIGH ║");
+  }
+  Serial.println("╚════════════════════════════╝");
+
   if (bRECEIVER) {
     Serial.println("\n>>> RECEIVER MODE");
+    Serial.println(">>> Expected: GPIO 15 connected to GPIO 17");
     MY_LORA_ADDRESS = LORA_RECEIVER_ADDRESS;
     TARGET_LORA_ADDRESS = LORA_SENDER_ADDRESS;
   } else {
     Serial.println("\n>>> SENDER MODE");
+    Serial.println(">>> Expected: GPIO 15 floating (no connection)");
     MY_LORA_ADDRESS = LORA_SENDER_ADDRESS;
     TARGET_LORA_ADDRESS = LORA_RECEIVER_ADDRESS;
   }
-  
-  Serial.print("My Address: ");
-  Serial.println(MY_LORA_ADDRESS);
-  Serial.print("Target Address: ");
-  Serial.println(TARGET_LORA_ADDRESS);
+
+  Serial.println("\n╔════════════════════════════╗");
+  Serial.println("║   LoRa CONFIGURATION      ║");
+  Serial.println("╠════════════════════════════╣");
+  Serial.print("║ My Address:     ");
+  Serial.print(MY_LORA_ADDRESS);
+  Serial.println("          ║");
+  Serial.print("║ Target Address: ");
+  Serial.print(TARGET_LORA_ADDRESS);
+  Serial.println("          ║");
+  Serial.print("║ Network ID:     ");
+  Serial.print(LORA_NETWORK_ID);
+  Serial.println("          ║");
+  Serial.println("╚════════════════════════════╝");
   
   // Initialize pins
   pinMode(LED_PIN, OUTPUT);
@@ -324,8 +355,10 @@ void setup() {
   // LCD for receiver
   if (bRECEIVER) {
     initLCD();
+    // Initialize lastMessageTime to current time to prevent false "NO SIGNAL" at startup
+    remote.lastMessageTime = millis();
   }
-  
+
   Serial.println("\n✓ Setup complete!\n");
 }
 
