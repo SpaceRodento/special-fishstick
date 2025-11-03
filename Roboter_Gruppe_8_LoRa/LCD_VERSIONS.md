@@ -43,14 +43,14 @@ void updateLCD() {
 
 ```
 ┌────────────────┐
-│[████████░░░░]123│  ← Wide signal bar (12 chars) + message count
-│-52dB L:1 T:0  v│  ← RSSI + Local LED + Touch + Spinner
+│[███████████]12 ^│  ← Wide bar (11 chars) + count + remote spinner
+│-52dB L:1 T:0  v│  ← RSSI + Local LED + Touch + local spinner
 └────────────────┘
 ```
 
 **Shows:**
-- **Line 1:** Wide visual signal strength bar (12 characters!) + message counter
-- **Line 2:** RSSI in dB, Local LED state, Touch state, Activity spinner
+- **Line 1:** Wide visual signal strength bar (11 characters) + message counter + remote spinner (via LoRa, slow)
+- **Line 2:** RSSI in dB, Local LED state, Touch state, local spinner (fast)
 
 **Signal bar examples:**
 - Strong: `[████████████] 45`  (-40 to -60 dBm)
@@ -75,14 +75,14 @@ void updateLCD() {
 
 ```
 ┌────────────────┐
-│[████████] -52dB│  ← Bar (8 chars) + RSSI
-│S:8 L:1 R:0 #12v│  ← SNR + Local + Remote + Count + Spinner
+│[████████] -52dB^│  ← Bar (8 chars) + RSSI + remote spinner
+│S:8 L:1 R:0 #12v│  ← SNR + Local + Remote + Count + local spinner
 └────────────────┘
 ```
 
 **Shows:**
-- **Line 1:** Signal bar (8 characters) + RSSI value
-- **Line 2:** SNR, Local LED, Remote LED, Message count (last 2 digits), Spinner
+- **Line 1:** Signal bar (8 characters) + RSSI value + remote spinner (via LoRa, slow)
+- **Line 2:** SNR, Local LED, Remote LED, Message count (last 2 digits), local spinner (fast)
 
 **Best for:** All info on screen, both local and remote LED visible
 
@@ -282,7 +282,7 @@ If your LCD has different characters available, adjust the bar style to match.
 **Q: "NO SIGNAL" appears immediately**
 - Check that sender is running
 - Verify both devices have same Network ID
-- Check GPIO 15-17 jumper for correct role
+- Check GPIO 16-17 jumper for correct role
 
 **Q: Numbers look wrong**
 - Check that `remote.rssi` and `remote.snr` are being updated
@@ -296,12 +296,12 @@ Print this and keep near your device:
 
 ```
 VERSION 1: WIDE BAR (Recommended)
-  [████████░░░░] 123    ← Bar + Count
-  -52dB L:1 T:0   v     ← RSSI + Status
+  [███████████]12 ^     ← Bar + Count + Remote Spinner
+  -52dB L:1 T:0   v     ← RSSI + Status + Local Spinner
 
 VERSION 2: COMPACT
-  [████████] -52dB      ← Bar + RSSI
-  S:8 L:1 R:0 #12v      ← SNR + All Status
+  [████████] -52dB^     ← Bar + RSSI + Remote Spinner
+  S:8 L:1 R:0 #12v      ← SNR + All Status + Local Spinner
 
 VERSION 3: DETAILED
   RX:123 -52dB =        ← Count + RSSI + Icon
@@ -310,6 +310,10 @@ VERSION 3: DETAILED
 VERSION 4: ORIGINAL
   REM:1 T:0      |      ← Remote Status
   LOC:0 T:1      v      ← Local Status
+
+SPINNERS:
+  Upper Right (^) = Remote spinner (via LoRa, slow updates)
+  Lower Right (v) = Local spinner (fast animation)
 
 SIGNAL ICONS (V3):
   ^ = Excellent  = = Good  - = Fair

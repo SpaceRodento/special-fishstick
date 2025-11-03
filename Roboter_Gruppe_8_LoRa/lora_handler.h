@@ -202,36 +202,47 @@ inline bool receiveLoRaMessage(DeviceState& remote, String& payload) {
     Serial.println("╠════════════════════════");
     Serial.print("║ Raw: ");
     Serial.println(response);
-    
+
     // Parse: +RCV=sender,length,data,RSSI,SNR
+    // NOTE: Data field may contain commas! Use length to parse correctly.
     int start = 5;  // Skip "+RCV="
     int comma1 = response.indexOf(',', start);
     int comma2 = response.indexOf(',', comma1 + 1);
-    int comma3 = response.indexOf(',', comma2 + 1);
-    int comma4 = response.indexOf(',', comma3 + 1);
-    
-    if (comma1 > 0 && comma2 > 0 && comma3 > 0) {
+
+    if (comma1 > 0 && comma2 > 0) {
       String sender = response.substring(start, comma1);
-      String length = response.substring(comma1 + 1, comma2);
-      payload = response.substring(comma2 + 1, comma3);
-      String rssiStr = response.substring(comma3 + 1, comma4);
-      String snrStr = response.substring(comma4 + 1);
-      
-      remote.rssi = rssiStr.toInt();
-      remote.snr = snrStr.toInt();
-      
-      Serial.print("║ From: ");
-      Serial.println(sender);
-      Serial.print("║ Data: ");
-      Serial.println(payload);
-      Serial.print("║ RSSI: ");
-      Serial.print(remote.rssi);
-      Serial.println(" dBm");
-      Serial.print("║ SNR:  ");
-      Serial.println(remote.snr);
-      Serial.println("╚════════════════════════");
-      
-      return true;
+      String lengthStr = response.substring(comma1 + 1, comma2);
+      int dataLength = lengthStr.toInt();
+
+      // Extract exact data length (data may contain commas!)
+      int dataStart = comma2 + 1;
+      payload = response.substring(dataStart, dataStart + dataLength);
+
+      // RSSI and SNR are after the data
+      int rssiStart = dataStart + dataLength + 1;  // +1 for comma
+      int comma3 = response.indexOf(',', rssiStart);
+
+      if (comma3 > 0) {
+        String rssiStr = response.substring(rssiStart, comma3);
+        String snrStr = response.substring(comma3 + 1);
+
+        remote.rssi = rssiStr.toInt();
+        remote.snr = snrStr.toInt();
+        remote.lastMessageTime = millis();  // Update last message timestamp!
+
+        Serial.print("║ From: ");
+        Serial.println(sender);
+        Serial.print("║ Data: ");
+        Serial.println(payload);
+        Serial.print("║ RSSI: ");
+        Serial.print(remote.rssi);
+        Serial.println(" dBm");
+        Serial.print("║ SNR:  ");
+        Serial.println(remote.snr);
+        Serial.println("╚════════════════════════");
+
+        return true;
+      }
     }
   }
   

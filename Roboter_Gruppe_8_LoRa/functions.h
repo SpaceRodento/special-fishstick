@@ -22,8 +22,8 @@ inline void initLCD() {
   lcd.setCursor(0, 0);
   lcd.print("ZignalMeister");
   lcd.setCursor(2, 1);
-  lcd.print("LoRa Edition!");
-  delay(2000);
+  lcd.print("2000");
+  delay(3000);
   lcd.clear();
 }
 

@@ -12,8 +12,9 @@
   - RYLR896 RX -> ESP32 GPIO26 (TX)
 
   Role Detection:
-  - Receiver: GPIO15 connected to GPIO17 (jumper wire)
-  - Sender:   GPIO15 floating (no connection)
+  - Receiver: GPIO16 connected to GPIO17 (jumper wire)
+  - Sender:   GPIO16 floating (no connection)
+  - Note: GPIO16 and GPIO17 are physically next to each other
 
   Both devices run IDENTICAL code!
   Role is auto-detected based on jumper wire.
@@ -128,11 +129,11 @@ void updateLCD() {
 
     // VERSION 1: WIDE VISUAL BAR + RSSI (RECOMMENDED) ⭐
     // Uncomment this version:
-    updateLCD_Version1_WideBar();
+  //  updateLCD_Version1_WideBar();
 
     // VERSION 2: COMPACT WITH NUMBERS
     // Uncomment this version:
-    // updateLCD_Version2_Compact();
+     updateLCD_Version2_Compact();
 
     // VERSION 3: DETAILED INFO
     // Uncomment this version:
@@ -146,16 +147,17 @@ void updateLCD() {
 
 // =============== VERSION 1: WIDE VISUAL BAR ⭐ ================================
 void updateLCD_Version1_WideBar() {
-  // Line 1: Wide signal bar (12 chars) + count
+  // Line 1: Wide signal bar (11 chars) + count + remote spinner
   lcd.setCursor(0, 0);
-  lcd.print(getSignalBar(remote.rssi, 12));  // [████████░░░░]
+  lcd.print(getSignalBar(remote.rssi, 11));  // [███████░░░░]
+  lcd.print(remote.messageCount % 100);  // Max 2 digits
   lcd.print(" ");
-  lcd.print(remote.messageCount % 1000);  // Max 3 digits
 
-  // Clear rest
-  lcd.print("   ");
+  // Remote spinner (received via LoRa, updates slowly)
+  lcd.setCursor(15, 0);
+  lcd.print(spinner.symbols[remote.spinnerIndex]);
 
-  // Line 2: RSSI value + local status + spinner
+  // Line 2: RSSI value + local status + local spinner
   lcd.setCursor(0, 1);
   lcd.print(remote.rssi);
   lcd.print("dB L:");
@@ -164,21 +166,26 @@ void updateLCD_Version1_WideBar() {
   lcd.print(local.touchState);
   lcd.print("  ");
 
+  // Local spinner (fast animation showing system is responsive)
   lcd.setCursor(15, 1);
   lcd.print(spinner.symbols[local.spinnerIndex]);
 }
 
 // =============== VERSION 2: COMPACT ================================
 void updateLCD_Version2_Compact() {
-  // Line 1: Signal bar (8 chars) + RSSI + SNR
+  // Line 1: Signal bar (8 chars) + RSSI + remote spinner
   lcd.setCursor(0, 0);
   lcd.print(getSignalBar(remote.rssi, 8));
-  lcd.print(" ");
+  //lcd.print(" ");
   lcd.print(remote.rssi);
   lcd.print("dB");
-  lcd.print("   ");
+  lcd.print(" ");
 
-  // Line 2: SNR + status + counter + spinner
+  // Remote spinner (received via LoRa, updates slowly)
+  lcd.setCursor(15, 0);
+  lcd.print(spinner.symbols[remote.spinnerIndex]);
+
+  // Line 2: SNR + status + counter + local spinner
   lcd.setCursor(0, 1);
   lcd.print("S:");
   lcd.print(remote.snr);
@@ -186,10 +193,11 @@ void updateLCD_Version2_Compact() {
   lcd.print(local.ledState);
   lcd.print(" R:");
   lcd.print(remote.ledState);
-  lcd.print(" #");
+  lcd.print(" ");
   lcd.print(remote.messageCount % 100);
   lcd.print(" ");
 
+  // Local spinner (fast animation showing system is responsive)
   lcd.setCursor(15, 1);
   lcd.print(spinner.symbols[local.spinnerIndex]);
 }
@@ -280,7 +288,7 @@ void setup() {
   
   Serial.println("\n\n\n");
   Serial.println("╔════════════════════════════╗");
-  Serial.println("║  ZignalMeister LoRa Final ║");
+  Serial.println("║  ZignalMeister 2000        ║");
   Serial.println("╚════════════════════════════╝");
   
   // Auto-detect role
@@ -290,21 +298,52 @@ void setup() {
   delay(100);
   
   bRECEIVER = (digitalRead(MODE_SELECT_PIN) == LOW);
-  
+
+  // ============================================
+  // DEBUG: Show pin state and role detection
+  // ============================================
+  Serial.println("\n╔════════════════════════════╗");
+  Serial.println("║   MODE DETECTION DEBUG    ║");
+  Serial.println("╠════════════════════════════╣");
+  Serial.print("║ MODE_GND_PIN (");
+  Serial.print(MODE_GND_PIN);
+  Serial.println(") -> LOW     ║");
+  Serial.print("║ MODE_SELECT_PIN (");
+  Serial.print(MODE_SELECT_PIN);
+  Serial.print("): ");
+  int pinReading = digitalRead(MODE_SELECT_PIN);
+  if (pinReading == LOW) {
+    Serial.println("LOW  ║");
+  } else {
+    Serial.println("HIGH ║");
+  }
+  Serial.println("╚════════════════════════════╝");
+
   if (bRECEIVER) {
     Serial.println("\n>>> RECEIVER MODE");
+    Serial.println(">>> Expected: GPIO 16 connected to GPIO 17 (jumper wire)");
     MY_LORA_ADDRESS = LORA_RECEIVER_ADDRESS;
     TARGET_LORA_ADDRESS = LORA_SENDER_ADDRESS;
   } else {
     Serial.println("\n>>> SENDER MODE");
+    Serial.println(">>> Expected: GPIO 16 floating (no connection)");
     MY_LORA_ADDRESS = LORA_SENDER_ADDRESS;
     TARGET_LORA_ADDRESS = LORA_RECEIVER_ADDRESS;
   }
-  
-  Serial.print("My Address: ");
-  Serial.println(MY_LORA_ADDRESS);
-  Serial.print("Target Address: ");
-  Serial.println(TARGET_LORA_ADDRESS);
+
+  Serial.println("\n╔════════════════════════════╗");
+  Serial.println("║   LoRa CONFIGURATION      ║");
+  Serial.println("╠════════════════════════════╣");
+  Serial.print("║ My Address:     ");
+  Serial.print(MY_LORA_ADDRESS);
+  Serial.println("          ║");
+  Serial.print("║ Target Address: ");
+  Serial.print(TARGET_LORA_ADDRESS);
+  Serial.println("          ║");
+  Serial.print("║ Network ID:     ");
+  Serial.print(LORA_NETWORK_ID);
+  Serial.println("          ║");
+  Serial.println("╚════════════════════════════╝");
   
   // Initialize pins
   pinMode(LED_PIN, OUTPUT);
@@ -324,8 +363,10 @@ void setup() {
   // LCD for receiver
   if (bRECEIVER) {
     initLCD();
+    // Initialize lastMessageTime to current time to prevent false "NO SIGNAL" at startup
+    remote.lastMessageTime = millis();
   }
-  
+
   Serial.println("\n✓ Setup complete!\n");
 }
 
