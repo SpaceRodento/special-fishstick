@@ -17,7 +17,8 @@ Role (sender/receiver) is automatically detected using a jumper wire:
 - **RYLR896 LoRa** communication with proven reliable settings
 - **LCD display** on receiver with 4 different display versions
 - **Connection watchdog** - Automatic state tracking (CONNECTED/WEAK/LOST) and recovery
-- **Kill-switch** - Physical button to restart device (GPIO 12↔14, hold 3s)
+- **Kill-switch** - Physical button to restart device (GPIO 13↔14, hold 3s)
+- **PC data logging** - CSV/JSON output for Python data analysis
 - **Dual spinner animations** - Local (fast) and remote (via LoRa) indicators
 - **Touch sensor** and LED status monitoring
 - **RSSI/SNR** signal quality monitoring (working correctly)
@@ -36,8 +37,13 @@ Role (sender/receiver) is automatically detected using a jumper wire:
 - `lora_handler.h` - RYLR896 LoRa communication handler
 - `functions.h` - LCD and helper functions
 
+### Python Scripts
+- `serial_monitor.py` - Real-time colored serial data viewer
+- `data_logger.py` - SQLite database logger for data analysis
+
 ### Documentation
 - `README.md` - This file, project overview
+- `PC_LOGGING_README.md` - **PC data logging guide with Python scripts**
 - `LCD_VERSIONS.md` - Detailed guide for all 4 LCD display versions
 - `STATUS_SUMMARY.md` - Current project status and features
 - `WATCHDOG_GUIDE.md` - Connection watchdog and health monitoring guide
@@ -73,9 +79,10 @@ Note: GPIO 16 and GPIO 17 are physically next to each other!
 ### Kill-Switch
 ```
 GPIO 14 (KILLSWITCH_GND_PIN)  -> Set as OUTPUT LOW (provides GND)
-GPIO 12 (KILLSWITCH_READ_PIN) -> Read with INPUT_PULLUP
+GPIO 13 (KILLSWITCH_READ_PIN) -> Read with INPUT_PULLUP
 
-To restart device: Connect GPIO 12 ↔ GPIO 14 and hold 3 seconds
+To restart device: Connect GPIO 13 ↔ GPIO 14 and hold 3 seconds
+Note: GPIO 12 is a strapping pin on ESP32, so GPIO 13 is used instead
 ```
 
 ### Additional Hardware
@@ -126,7 +133,8 @@ Developed and tested with:
 - RSSI/SNR parsing fixed to handle comma-separated data correctly
 - 4 LCD display versions available (see `LCD_VERSIONS.md`)
 - Dual spinner animations show local activity (fast) and remote updates (slow)
-- **Kill-switch**: GPIO 12↔14, hold 3 seconds to restart device
+- **Kill-switch**: GPIO 13↔14, hold 3 seconds to restart device
+- **PC data logging**: CSV/JSON output for Python analysis (see `PC_LOGGING_README.md`)
 - **Connection watchdog**: Automatic state tracking and recovery (see `WATCHDOG_GUIDE.md`)
 
 ## 🔴 Kill-Switch Usage
@@ -134,7 +142,7 @@ Developed and tested with:
 The kill-switch allows you to restart the device without re-uploading code.
 
 **How to use:**
-1. Connect GPIO 12 to GPIO 14 with a jumper wire (or button)
+1. Connect GPIO 13 to GPIO 14 with a jumper wire (or button)
 2. Hold for 3 seconds
 3. Watch Serial Monitor for countdown
 4. Device restarts automatically
@@ -145,7 +153,7 @@ The kill-switch allows you to restart the device without re-uploading code.
 🔴 2 more seconds...
 🔴 1 more second...
 ╔════════════════════════════════╗
-║  🔴 RESTARTING DEVICE NOW 🔴  ║
+║  🔴 RESTART: Physical kill-switch  ║
 ╚════════════════════════════════╝
 [Device restarts]
 ```
@@ -154,4 +162,28 @@ The kill-switch allows you to restart the device without re-uploading code.
 - Emergency stop during testing
 - Quick restart without power cycling
 - Safety feature for robot control
-- Remote restart (future: via LoRa command)
+- Remote restart via LoRa command: Send "CMD:RESTART"
+
+## 💻 PC Data Logging
+
+Connect ESP32 to your computer and log data in real-time!
+
+**Quick Start:**
+```bash
+# Install pyserial
+pip install pyserial
+
+# Real-time monitoring
+python serial_monitor.py /dev/ttyUSB0 115200
+
+# Database logging
+python data_logger.py /dev/ttyUSB0 115200 lora_data.db
+```
+
+**Features:**
+- CSV data output every 2 seconds (configurable)
+- Real-time colored terminal display
+- SQLite database logging for analysis
+- RSSI, SNR, packet loss, connection state tracking
+
+**See `PC_LOGGING_README.md` for full documentation.**

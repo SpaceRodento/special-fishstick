@@ -45,4 +45,9 @@
 // =============== DEBUG ================================
 #define DEBUG_LORA_AT true
 
+// =============== PC DATA LOGGING ================================
+#define ENABLE_CSV_OUTPUT true       // Enable CSV data output for Python logging
+#define ENABLE_JSON_OUTPUT false     // Enable JSON data output (alternative format)
+#define DATA_OUTPUT_INTERVAL 2000    // Output interval in ms (2 seconds)
+
 #endif // CONFIG_H

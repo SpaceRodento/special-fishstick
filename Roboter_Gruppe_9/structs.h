@@ -37,6 +37,7 @@ struct TimingData {
   unsigned long lastSend;
   unsigned long lastSpinner;
   unsigned long lastHealthReport;
+  unsigned long lastDataOutput;  // For CSV/JSON logging
 };
 
 // =============== SPINNER DATA STRUCTURE ================================

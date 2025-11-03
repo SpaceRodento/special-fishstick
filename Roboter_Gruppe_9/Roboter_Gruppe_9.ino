@@ -376,6 +376,58 @@ void updateLCD_Version4_Original() {
   lcd.print(spinner.symbols[local.spinnerIndex]);
 }
 
+// =============== PC DATA LOGGING ================================
+// CSV and JSON output for Python data logging
+
+void printDataCSV() {
+  // Format: DATA_CSV,TIMESTAMP,ROLE,RSSI,SNR,SEQ,MSG_COUNT,CONN_STATE,PACKET_LOSS,LED,TOUCH
+  Serial.print("DATA_CSV,");
+  Serial.print(millis());
+  Serial.print(",");
+  Serial.print(bRECEIVER ? "RX" : "TX");
+  Serial.print(",");
+  Serial.print(remote.rssi);
+  Serial.print(",");
+  Serial.print(remote.snr);
+  Serial.print(",");
+  Serial.print(remote.sequenceNumber);
+  Serial.print(",");
+  Serial.print(bRECEIVER ? remote.messageCount : local.messageCount);
+  Serial.print(",");
+  Serial.print(getConnectionStateString(health.state));
+  Serial.print(",");
+  Serial.print(getPacketLoss(health), 2);
+  Serial.print(",");
+  Serial.print(local.ledState);
+  Serial.print(",");
+  Serial.println(local.touchState);
+}
+
+void printDataJSON() {
+  // JSON format for easier parsing
+  Serial.print("{\"ts\":");
+  Serial.print(millis());
+  Serial.print(",\"role\":\"");
+  Serial.print(bRECEIVER ? "RX" : "TX");
+  Serial.print("\",\"rssi\":");
+  Serial.print(remote.rssi);
+  Serial.print(",\"snr\":");
+  Serial.print(remote.snr);
+  Serial.print(",\"seq\":");
+  Serial.print(remote.sequenceNumber);
+  Serial.print(",\"count\":");
+  Serial.print(bRECEIVER ? remote.messageCount : local.messageCount);
+  Serial.print(",\"state\":\"");
+  Serial.print(getConnectionStateString(health.state));
+  Serial.print("\",\"loss\":");
+  Serial.print(getPacketLoss(health), 2);
+  Serial.print(",\"led\":");
+  Serial.print(local.ledState);
+  Serial.print(",\"touch\":");
+  Serial.print(local.touchState);
+  Serial.println("}");
+}
+
 void printStatus() {
   Serial.println("\n============================");
   
@@ -477,7 +529,7 @@ void setup() {
   // Initialize structs
   local = {LOW, 0, false, 0, 0, 0, 0, 0, 0};     // Added sequenceNumber
   remote = {0, 0, 0, 0, 0, 0, 0, 0, 0};           // Added sequenceNumber
-  timing = {0, 0, 0, 0, 0, 0, 0};                 // Added lastHealthReport
+  timing = {0, 0, 0, 0, 0, 0, 0, 0};              // Added lastHealthReport, lastDataOutput
   spinner = {{'<', '^', '>', 'v'}, 0, 0};
   
   // Initialize LoRa
@@ -590,6 +642,19 @@ void loop() {
       printStatus();
     }
   }
-  
+
+  // PC Data Logging (both roles)
+  if (millis() - timing.lastDataOutput >= DATA_OUTPUT_INTERVAL) {
+    timing.lastDataOutput = millis();
+
+    #if ENABLE_CSV_OUTPUT
+      printDataCSV();
+    #endif
+
+    #if ENABLE_JSON_OUTPUT
+      printDataJSON();
+    #endif
+  }
+
   delay(10);
 }
