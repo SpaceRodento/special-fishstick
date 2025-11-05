@@ -570,8 +570,8 @@ void setup() {
     remote.lastMessageTime = millis();
   }
 
-  // Display station configuration
-  printDisplayConfig();
+  // Display station (UART-based, works for both sender and receiver)
+  initDisplaySender();
 
   Serial.println("\n✓ Setup complete!\n");
 }

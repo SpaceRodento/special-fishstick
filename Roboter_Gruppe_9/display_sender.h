@@ -1,22 +1,31 @@
 /*=====================================================================
-  display_sender.h - Display Station Data Sender
+  display_sender.h - Display Station Data Sender (UART version)
 
-  Sends real-time status updates to TFT display station
-  (ESP32-2432S022 @ LoRa address 3)
+  Sends real-time status updates to TFT display station via Serial.
+  NO LoRa required - simple UART connection!
+
+  Hardware connection:
+  - Main ESP32 TX (GPIO 17) → Display RX (GPIO 18)
+  - GND → GND
 
   Features:
-  - Sends comprehensive status data
-  - Includes battery, RSSI, telemetry
-  - Supports alert notifications
+  - Simple UART communication
+  - Automatically includes enabled features
   - Configurable update interval
+  - No dependencies on LoRa
 
   Usage:
   1. Set ENABLE_DISPLAY_OUTPUT true in config.h
-  2. Call sendDisplayUpdate() in loop()
-  3. Display station will receive and parse data automatically
+  2. Call initDisplaySender() in setup()
+  3. Call sendDisplayUpdate() in loop()
 
-  Message Format:
-  CSV format: "SEQ:123,LED:1,TOUCH:0,BAT:3.85,UP:3600,..."
+  Example:
+    #if ENABLE_DISPLAY_OUTPUT
+      initDisplaySender();
+    #endif
+
+    // In loop:
+    sendDisplayUpdate();
 =======================================================================*/
 
 #ifndef DISPLAY_SENDER_H
@@ -24,37 +33,73 @@
 
 #include <Arduino.h>
 #include "config.h"
+#include "DisplayClient.h"
 
 // External declarations
-extern bool sendLoRaMessage(String message, uint8_t targetAddress);
 extern DeviceState local;
+extern DeviceState remote;
+extern bool bRECEIVER;
 
 #if ENABLE_BATTERY_MONITOR
   extern float readBatteryVoltage();
 #endif
 
-#if ENABLE_EXTENDED_TELEMETRY
-  extern String getTelemetryString();
-#endif
-
 #if ENABLE_AUDIO_DETECTION
   extern bool isFireAlarmActive();
-  extern int audio_currentRMS;
-  extern int audio_peakCount;
+  extern struct AudioDetector {
+    int currentRMS;
+    int peakCount;
+    bool alarmDetected;
+    int alertCount;
+  } audio;
 #endif
 
 #if ENABLE_LIGHT_DETECTION
   extern bool isFireLightActive();
-  extern uint16_t light_red;
-  extern int light_flashCount;
+  extern struct LightDetector {
+    uint16_t red;
+    int flashCount;
+    bool alarmDetected;
+    int alertCount;
+  } light;
 #endif
 
-// Display update tracking
-unsigned long lastDisplayUpdate = 0;
+// Global display client
+#if ENABLE_DISPLAY_OUTPUT
+  DisplayClient display(DISPLAY_TX_PIN);
+  unsigned long lastDisplayUpdate = 0;
+#endif
 
 /**
- * Send status update to display station
- * Call this regularly from loop() (every DISPLAY_UPDATE_INTERVAL ms)
+ * Initialize display sender
+ * Call this in setup()
+ */
+void initDisplaySender() {
+  #if ENABLE_DISPLAY_OUTPUT
+    display.begin();
+    delay(100);
+
+    // Send welcome message
+    display.alert("Roboter 9 online");
+    delay(2000);
+    display.clearAlert();
+
+    Serial.println("\n📺 Display output enabled:");
+    Serial.print("  TX pin: GPIO ");
+    Serial.println(DISPLAY_TX_PIN);
+    Serial.print("  Update interval: ");
+    Serial.print(DISPLAY_UPDATE_INTERVAL);
+    Serial.println(" ms");
+    Serial.println("  Connection: TX → Display RX (GPIO 18)");
+  #else
+    Serial.println("\n📺 Display output: Disabled");
+    Serial.println("  (Set ENABLE_DISPLAY_OUTPUT true to enable)");
+  #endif
+}
+
+/**
+ * Send status update to display
+ * Call this regularly from loop()
  */
 void sendDisplayUpdate() {
   #if ENABLE_DISPLAY_OUTPUT
@@ -67,102 +112,105 @@ void sendDisplayUpdate() {
 
     lastDisplayUpdate = now;
 
-    // Build payload with basic status
-    String payload = "SEQ:" + String(local.sequenceNumber) +
-                     ",LED:" + String(local.ledState ? 1 : 0) +
-                     ",TOUCH:" + String(local.touchState ? 1 : 0);
+    // Start building message
+    display.clear();
 
-    // Add battery voltage if enabled
+    // Role
+    display.set("Mode", bRECEIVER ? "RECEIVER" : "SENDER");
+
+    // Basic status
+    display.set("SEQ", local.sequenceNumber);
+    display.set("LED", local.ledState ? "ON" : "OFF");
+    display.set("TOUCH", local.touchState ? "YES" : "NO");
+    display.set("Count", local.messageCount);
+
+    // Remote data (if receiver)
+    if (bRECEIVER && remote.messageCount > 0) {
+      display.set("R_LED", remote.ledState ? "ON" : "OFF");
+      display.set("R_TOUCH", remote.touchState ? "YES" : "NO");
+    }
+
+    // RSSI (if available)
+    if (remote.rssi != 0) {
+      display.set("RSSI", String(remote.rssi) + "dBm");
+    }
+
+    // SNR (if available)
+    if (remote.snr != 0) {
+      display.set("SNR", String(remote.snr) + "dB");
+    }
+
+    // Battery voltage (if enabled)
     #if ENABLE_BATTERY_MONITOR
       float batVoltage = readBatteryVoltage();
-      payload += ",BAT:" + String(batVoltage, 2);
+      display.set("Battery", String(batVoltage, 2) + "V");
     #endif
 
-    // Add extended telemetry if enabled
+    // Extended telemetry (if enabled)
     #if ENABLE_EXTENDED_TELEMETRY
-      payload += getTelemetryString();
+      display.set("Uptime", String(millis() / 1000) + "s");
+      display.set("Heap", String(ESP.getFreeHeap() / 1024) + "KB");
+
+      // Internal temperature
+      extern "C" uint8_t temprature_sens_read();
+      uint8_t raw = temprature_sens_read();
+      float tempC = (raw - 32) / 1.8;
+      display.set("Temp", String((int)tempC) + "C");
     #endif
 
-    // Add fire alerts if detected
+    // Send all data
+    display.send();
+
+    // Check for fire alerts
     #if ENABLE_AUDIO_DETECTION
-      if (isFireAlarmActive()) {
-        payload += ",ALERT:FIRE_AUDIO";
-        payload += ",RMS:" + String(audio_currentRMS);
-        payload += ",PEAKS:" + String(audio_peakCount);
+      if (audio.alarmDetected) {
+        display.alert("FIRE: Audio!");
       }
     #endif
 
     #if ENABLE_LIGHT_DETECTION
-      if (isFireLightActive()) {
-        payload += ",ALERT:FIRE_LIGHT";
-        payload += ",RED:" + String(light_red);
-        payload += ",FLASHES:" + String(light_flashCount);
+      if (light.alarmDetected) {
+        display.alert("FIRE: Light!");
       }
     #endif
 
-    // Send to display station (address 3)
-    if (sendLoRaMessage(payload, LORA_DISPLAY_ADDRESS)) {
-      Serial.print("📺 Display update sent (");
-      Serial.print(payload.length());
-      Serial.println(" bytes)");
-    } else {
-      Serial.println("❌ Display update failed");
-    }
+    // Clear alert if no alarms
+    #if ENABLE_AUDIO_DETECTION || ENABLE_LIGHT_DETECTION
+      #if ENABLE_AUDIO_DETECTION
+        bool audioAlarm = audio.alarmDetected;
+      #else
+        bool audioAlarm = false;
+      #endif
+
+      #if ENABLE_LIGHT_DETECTION
+        bool lightAlarm = light.alarmDetected;
+      #else
+        bool lightAlarm = false;
+      #endif
+
+      if (!audioAlarm && !lightAlarm) {
+        display.clearAlert();
+      }
+    #endif
   #endif
 }
 
 /**
- * Send alert to display station
- * Use for immediate notifications (bypasses update interval)
+ * Send immediate alert to display
+ * Bypasses update interval
  */
-void sendDisplayAlert(String alertType, String alertData) {
+void sendDisplayAlert(String message) {
   #if ENABLE_DISPLAY_OUTPUT
-    String payload = "ALERT:" + alertType;
-    if (alertData.length() > 0) {
-      payload += "," + alertData;
-    }
-
-    if (sendLoRaMessage(payload, LORA_DISPLAY_ADDRESS)) {
-      Serial.print("🚨 Alert sent to display: ");
-      Serial.println(alertType);
-    }
+    display.alert(message);
   #endif
 }
 
 /**
- * Print display configuration at startup
+ * Clear alert from display
  */
-void printDisplayConfig() {
+void clearDisplayAlert() {
   #if ENABLE_DISPLAY_OUTPUT
-    Serial.println("\n📺 Display Station Enabled:");
-    Serial.print("  Target address: ");
-    Serial.println(LORA_DISPLAY_ADDRESS);
-    Serial.print("  Update interval: ");
-    Serial.print(DISPLAY_UPDATE_INTERVAL);
-    Serial.println(" ms");
-
-    Serial.print("  Data includes: SEQ, LED, TOUCH");
-
-    #if ENABLE_BATTERY_MONITOR
-      Serial.print(", BAT");
-    #endif
-
-    #if ENABLE_EXTENDED_TELEMETRY
-      Serial.print(", UP, HEAP, TEMP, LOOP");
-    #endif
-
-    #if ENABLE_AUDIO_DETECTION
-      Serial.print(", FIRE_AUDIO");
-    #endif
-
-    #if ENABLE_LIGHT_DETECTION
-      Serial.print(", FIRE_LIGHT");
-    #endif
-
-    Serial.println();
-  #else
-    Serial.println("\n📺 Display Station: Disabled");
-    Serial.println("  (Set ENABLE_DISPLAY_OUTPUT true to enable)");
+    display.clearAlert();
   #endif
 }
 
