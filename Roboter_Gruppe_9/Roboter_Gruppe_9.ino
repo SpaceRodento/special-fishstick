@@ -35,6 +35,7 @@
 #include "functions.h"
 #include "lora_handler.h"
 #include "health_monitor.h"
+#include "display_sender.h"  // TFT display station support
 
 // =============== KILL-SWITCH CONFIG ================================
 // GPIO 12 is a strapping pin on ESP32 - use GPIO 13 instead!
@@ -569,6 +570,9 @@ void setup() {
     remote.lastMessageTime = millis();
   }
 
+  // Display station configuration
+  printDisplayConfig();
+
   Serial.println("\n✓ Setup complete!\n");
 }
 
@@ -707,6 +711,9 @@ void loop() {
         #endif
       }
     }
+
+    // Send update to display station (if enabled)
+    sendDisplayUpdate();
 
     if (millis() - timing.lastCheck >= 5000) {
       timing.lastCheck = millis();

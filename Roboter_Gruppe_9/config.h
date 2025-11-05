@@ -27,7 +27,8 @@
 // =============== LoRa CONFIGURATION ================================
 #define LORA_RECEIVER_ADDRESS 1   // Receiver ID
 #define LORA_SENDER_ADDRESS 2     // Sender ID
-#define LORA_NETWORK_ID 6         // Network ID (sama molemmilla!)
+#define LORA_DISPLAY_ADDRESS 3    // Display station ID (ESP32-2432S022)
+#define LORA_NETWORK_ID 6         // Network ID (sama kaikilla!)
 #define LORA_BAUDRATE 115200      // RYLR896 baudrate
 
 // =============== COMMUNICATION ================================
@@ -54,6 +55,11 @@
 #define ENABLE_BIDIRECTIONAL true    // Enable two-way communication
 #define ACK_INTERVAL 5               // Send ACK every N messages (receiver)
 #define LISTEN_TIMEOUT 500           // Time sender listens for response (ms)
+
+// =============== DISPLAY STATION ================================
+// Send real-time data to TFT display station (ESP32-2432S022)
+#define ENABLE_DISPLAY_OUTPUT false  // Enable sending data to display (address 3)
+#define DISPLAY_UPDATE_INTERVAL 2000 // Send to display every 2 seconds
 
 // =============== FEATURE FLAGS ================================
 // 🚀 EXPERIMENTAL FEATURES - Easily enable/disable for testing
