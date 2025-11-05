@@ -136,4 +136,24 @@
 #define ENABLE_PACKET_STATS false
 #define PACKET_STATS_INTERVAL 30000      // Report every 30 seconds
 
+// FEATURE 11: Audio Detection (Smoke Alarm Sound)
+// Detects smoke alarm audible alert (85dB @ 3kHz, 3-4 beeps/second)
+// Hardware: MAX4466 microphone amplifier connected to GPIO 34 (ADC1_CH6)
+// Testing: Enable and test with smoke alarm or tone generator at 3kHz
+#define ENABLE_AUDIO_DETECTION false
+#define AUDIO_PIN 34                     // ADC1_CH6 (input-only, works with WiFi)
+#define AUDIO_SAMPLES 100                // Samples for RMS calculation
+#define AUDIO_THRESHOLD 200              // RMS threshold for alarm detection
+#define AUDIO_PEAK_MIN 3                 // Minimum peaks per second
+#define AUDIO_PEAK_MAX 5                 // Maximum peaks per second
+#define AUDIO_COOLDOWN 5000              // Cooldown between alerts (5s)
+
+// FEATURE 12: Light Detection (Smoke Alarm LED)
+// Detects smoke alarm visual indicator (flashing red LED, typically 1 Hz)
+// Hardware: TCS34725 RGB color sensor on I2C (SDA=GPIO21, SCL=GPIO22)
+// Requires: Adafruit_TCS34725 library
+// Testing: Enable and test with red LED flashlight
+#define ENABLE_LIGHT_DETECTION false
+// I2C pins: SDA=21, SCL=22 (standard ESP32 I2C pins)
+
 #endif // CONFIG_H

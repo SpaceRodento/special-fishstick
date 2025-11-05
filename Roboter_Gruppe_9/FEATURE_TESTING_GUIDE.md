@@ -1005,6 +1005,418 @@ Lisää CSV:hen yksityiskohtaiset tilastot:
 
 ---
 
+## FEATURE 11: Audio Detection (Palovaroittimen äänitarkkailu) 🔊
+
+**Tarkoitus:** Havaitsee palovaroittimen hälytysäänen ja lähettää hälytyksen LoRa-verkossa
+
+### Laitteistokytkentä
+
+```
+MAX4466 Microphone Amplifier → ESP32
+───────────────────────────────────
+VCC   →  3.3V
+GND   →  GND
+OUT   →  GPIO 34 (ADC1_CH6)
+GAIN  →  (adjustable potentiometer - säädä herkkyyttä)
+```
+
+**Laitteiston hankinta:**
+- MAX4466 Electret Microphone Amplifier
+- Hinta: ~3-5€
+- Tilaus: AliExpress, Amazon, elektroniikkakaupat
+- Suositus: Osta säädettävällä gainilla (potentiometri)
+
+**Miksi MAX4466?**
+- Säädettävä gain (25-125×)
+- Vähäkohinainen
+- Analog output (helppo ESP32:lle)
+- Rail-to-rail output (0-3.3V)
+
+### config.h -asetukset
+
+```cpp
+#define ENABLE_AUDIO_DETECTION true      // ← Muuta tämä
+#define AUDIO_PIN 34                     // ADC1_CH6
+#define AUDIO_SAMPLES 100                // RMS-laskentaan
+#define AUDIO_THRESHOLD 200              // RMS kynnys
+#define AUDIO_PEAK_MIN 3                 // Min peaks/sekunti
+#define AUDIO_PEAK_MAX 5                 // Max peaks/sekunti
+#define AUDIO_COOLDOWN 5000              // 5s välein hälytykset
+```
+
+### Palovaroittimen ääniominaisuudet
+
+**Tyypillinen palovaroitin:**
+- Taajuus: ~3 kHz (korkea ääni)
+- Voimakkuus: 85 dB @ 3 metriä
+- Kuvio: 3-4 piippauksia sekunnissa
+- Kesto: Jatkuva kunnes sammutetaan
+
+### Testausvaiheet
+
+#### Testi 1: Perustoiminta ja kalibrointi
+1. ✅ Kytke MAX4466 GPIO 34:ään
+2. ✅ Lataa koodi
+3. ✅ Serial näyttää:
+   ```
+   🔊 Audio detection initialized
+     Pin: GPIO 34 (ADC1_CH6)
+     Sample rate: 100 samples/update
+     RMS threshold: 200
+     Pattern: 3-5 peaks per second
+     Cooldown: 5000 ms
+   ```
+4. ✅ Kalibroi ympäristön melutaso:
+   ```
+   📡 Calibrating audio baseline...
+      Ensure quiet environment for calibration
+      Measuring for 3 seconds...
+   .........
+   ✓ Ambient noise level: 45 RMS
+     Recommended threshold: 95
+   ```
+
+**Huom:** Jos RMS > 200 normaalisti → säädä `AUDIO_THRESHOLD` korkeammaksi!
+
+#### Testi 2: Äänitason seuranta
+1. ✅ Odota normaali päivitys (200ms)
+2. ✅ Serial näyttää hiljaisessa tilassa:
+   ```
+   🔊 Audio update: RMS:42, Peaks:0, Alarm:NO
+   ```
+3. ✅ Taputa mikrofonia:
+   ```
+   🔊 Audio update: RMS:385, Peaks:0, Alarm:NO
+   ```
+4. ✅ Tarkista että RMS reagoi ääniin
+
+#### Testi 3: Hälytyskuvion tunnistus (ilman palovaroitinta)
+1. ✅ **Vaihtoehto A:** Käytä älypuhelimen äänigeneraattoria
+   - Lataa sovellus: "Tone Generator" tai "Signal Generator"
+   - Aseta: 3000 Hz (3 kHz)
+   - Soita toistuvaa ääntä 3-4× sekunnissa
+
+2. ✅ **Vaihtoehto B:** Käytä tietokoneohjelma
+   - Avaa: https://www.szynalski.com/tone-generator/
+   - Aseta 3000 Hz
+   - Paina play/pause rytmisesti
+
+3. ✅ Serial näyttää kuvion tunnistuksen:
+   ```
+   💡 Peak detected! Count: 1
+   💡 Peak detected! Count: 2
+   💡 Peak detected! Count: 3
+   🚨🚨🚨 FIRE ALARM AUDIO DETECTED! 🚨🚨🚨
+     RMS value: 450
+     Peaks detected: 3
+     Sending LoRa alert...
+   ```
+
+#### Testi 4: LoRa-hälytyksen lähetys
+1. ✅ Kun hälytys havaitaan → Serial:
+   ```
+   → Sending: ALERT:FIRE_AUDIO,RMS:450,PEAKS:3
+   +OK
+   ```
+2. ✅ Toisella laitteella pitäisi näkyä:
+   ```
+   +RCV=2,14,ALERT:FIRE_AUDIO,RMS:450,PEAKS:3,-85,12
+   🚨 FIRE ALERT RECEIVED FROM AUDIO DETECTOR!
+   ```
+
+#### Testi 5: Todellinen palovaroitin
+1. ✅ **VAROITUS:** Tee tämä ulkona tai turvallisessa paikassa!
+2. ✅ Aktivoi palovaroitin (paina testipainiketta)
+3. ✅ Serial pitäisi näyttää tunnistus 1-3 sekunnissa
+4. ✅ Testaa eri etäisyyksillä:
+   - 0.5 metriä: RMS > 400 (todennäköisesti)
+   - 1 metri: RMS 250-400
+   - 2 metriä: RMS 150-250
+   - 3 metriä: RMS 100-150
+
+**Jos ei tunnista:**
+- Säädä MAX4466:n gain-potentiometria (käännä myötäpäivään)
+- Laske `AUDIO_THRESHOLD` arvoa (esim. 150)
+- Tarkista ettei ympäristö ole liian meluisa
+
+#### Testi 6: Väärien hälytysten esto
+1. ✅ Testaa normaalilla puheella → Ei hälytystä
+2. ✅ Testaa musiikilla → Ei hälytystä
+3. ✅ Testaa muilla äänillä → Ei hälytystä
+4. ✅ Vain oikea kuvio (3-4 piippaukset/s) → Hälytys
+
+**Jos false positives:**
+```
+⚠️ False alarm detected! Not smoke alarm pattern.
+  Peak count outside range: 8 (expected 3-5)
+```
+
+### Vianmääritys
+
+| Ongelma | Syy | Ratkaisu |
+|---------|-----|----------|
+| RMS aina 0 | Ei kytkentää | Tarkista OUT → GPIO 34 |
+| RMS aina 2048 | Väärä referenssi | Tarkista VCC ja GND |
+| Liian herkkä | Gain liian korkea | Säädä potentiometria vastapäivään |
+| Ei tunnista | Gain liian matala | Säädä potentiometria myötäpäivään |
+| Jatkuvasti peaks | Meluisa ympäristö | Suorita uudelleen kalibrointi |
+
+### CSV-output
+
+```
+...,AUDIO_RMS:42,AUDIO_ALARM:0,AUDIO_ALERTS:0
+```
+
+Hälytyksen aikana:
+```
+...,AUDIO_RMS:450,AUDIO_ALARM:1,AUDIO_ALERTS:3
+```
+
+---
+
+## FEATURE 12: Light Detection (Palovaroittimen valotarkkailu) 💡
+
+**Tarkoitus:** Havaitsee palovaroittimen vilkkuvan punaisen LEDin ja lähettää hälytyksen
+
+### Laitteistokytkentä
+
+```
+TCS34725 RGB Color Sensor → ESP32
+──────────────────────────────────
+VIN   →  3.3V (tai 5V jos level shifter)
+GND   →  GND
+SDA   →  GPIO 21 (I2C SDA)
+SCL   →  GPIO 22 (I2C SCL)
+LED   →  3.3V (valinnainen, sensorin valoitus)
+INT   →  (ei käytetä)
+```
+
+**Laitteiston hankinta:**
+- TCS34725 RGB Color Sensor with IR filter
+- Hinta: ~8-12€
+- Tilaus: Adafruit, AliExpress, Amazon
+- Tarvitaan: **Adafruit_TCS34725** Arduino-kirjasto
+
+**Miksi TCS34725?**
+- I2C-käyttöliittymä (helppo)
+- Mittaa RGB + Lux yhdessä
+- Integroitu IR-filtteri
+- Säädettävä gain ja integration time
+- Hyvä tarkkuus värien erotteluun
+
+### Kirjaston asennus
+
+**Arduino IDE:**
+1. Tools → Manage Libraries
+2. Etsi: "Adafruit TCS34725"
+3. Asenna: "Adafruit TCS34725" (+ riippuvuudet)
+
+**Tai manuaalisesti:**
+```bash
+git clone https://github.com/adafruit/Adafruit_TCS34725
+```
+
+### config.h -asetukset
+
+```cpp
+#define ENABLE_LIGHT_DETECTION true      // ← Muuta tämä
+// I2C pinnit kiinteät: SDA=21, SCL=22
+```
+
+**Main .ino -tiedostoon lisättävä:**
+```cpp
+#if ENABLE_LIGHT_DETECTION
+  #include <Wire.h>
+  #include <Adafruit_TCS34725.h>
+  #include "light_detector.h"
+
+  // Luo sensor-olio (integration time, gain)
+  Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_50MS, TCS34725_GAIN_4X);
+#endif
+```
+
+### Palovaroittimen valo-ominaisuudet
+
+**Tyypillinen palovaroitin:**
+- Väri: Punainen (λ ~620-750 nm)
+- Kuvio: Vilkkuu 1 Hz (1 välähdys/sekunti)
+- Joissakin: Jatkuva punainen valo hälytyksen aikana
+- Kirkkaus: Näkyy päivänvalossa
+
+### Testausvaiheet
+
+#### Testi 1: I2C-sensorin tunnistus
+1. ✅ Kytke TCS34725 I2C-väylään
+2. ✅ Lataa koodi
+3. ✅ Serial näyttää:
+   ```
+   💡 Light detection initialized
+     Sensor: TCS34725 RGB Color Sensor
+     I2C: SDA=GPIO21, SCL=GPIO22
+     Red threshold: 100
+     Ratio threshold: 2.0
+     🚨 Smoke alarm LED monitoring active
+     ⚠️  Requires Adafruit_TCS34725 library!
+   ```
+4. ✅ Jos sensoria ei löydy:
+   ```
+   ❌ TCS34725 sensor not found!
+      Check:
+      - TCS34725 connected?
+      - I2C wiring correct?
+      - Library installed?
+   ```
+
+**I2C-vianetsintä:**
+```cpp
+// Main .ino -tiedostossa setup():
+Wire.begin();
+Wire.beginTransmission(0x29);  // TCS34725 I2C address
+if (Wire.endTransmission() == 0) {
+  Serial.println("✓ TCS34725 found at 0x29");
+} else {
+  Serial.println("❌ TCS34725 NOT found!");
+}
+```
+
+#### Testi 2: RGB-arvojen lukeminen
+1. ✅ Lisää loop():iin sensor-lukeminen:
+   ```cpp
+   #if ENABLE_LIGHT_DETECTION
+     uint16_t r, g, b, c;
+     tcs.getRawData(&r, &g, &b, &c);
+     updateLightReadings(r, g, b, c);
+     updateLightDetection();
+   #endif
+   ```
+2. ✅ Serial näyttää:
+   ```
+   🔊 Light update: R:45, G:52, B:48, Lux:145
+   ```
+3. ✅ Testaa eri väreillä:
+   - Valkoinen paperi: R≈G≈B
+   - Punainen esine: R > G ja R > B
+   - Sininen esine: B > R ja B > G
+
+#### Testi 3: Punaisen valon tunnistus
+1. ✅ Käytä punaista LED-taskulamppua tai älypuhelin
+2. ✅ Osoita suoraan sensoriin
+3. ✅ Serial pitäisi näyttää:
+   ```
+   🔴 Red light detected! R:255, G:45, B:30
+   ```
+4. ✅ Tarkista ratio:
+   - R/G ≈ 255/45 ≈ 5.7 (> 2.0 ✓)
+   - R/B ≈ 255/30 ≈ 8.5 (> 2.0 ✓)
+
+#### Testi 4: Vilkkumiskuvion tunnistus
+1. ✅ Vilkuta punaista valoa 1× sekunnissa
+2. ✅ Serial näyttää:
+   ```
+   💡 Flash detected! Count: 1
+   💡 Flash detected! Count: 2
+   🚨🚨🚨 SMOKE ALARM LIGHT DETECTED! 🚨🚨🚨
+     Red value: 255
+     Flashes: 2
+     Sending LoRa alert...
+   ```
+3. ✅ Vähintään 2 välähdystä tarvitaan vahvistukseen
+
+#### Testi 5: Todellinen palovaroitin
+1. ✅ Asenna sensori noin 0.5-3 metrin päähän palovaroittimesta
+2. ✅ Kohdista sensori LEDiin
+3. ✅ Aktivoi palovaroitin (testipainike)
+4. ✅ Serial näyttää tunnistuksen 1-3 sekunnissa
+
+**Asennus-vinkkejä:**
+- Käytä pahviputkea fokusoimaan vain LED (estää häikäisy)
+- Vältä suoraa auringonvaloa (voi häiritä)
+- Optimaalinen etäisyys: 0.5-3 metriä
+- Kohdista tarkasti LEDiin
+
+#### Testi 6: LoRa-hälytyksen lähetys
+1. ✅ Kun vilkkuva punainen havaitaan → Serial:
+   ```
+   → Sending: ALERT:FIRE_LIGHT,RED:255,FLASHES:5
+   +OK
+   ```
+2. ✅ Toisella laitteella:
+   ```
+   +RCV=2,14,ALERT:FIRE_LIGHT,RED:255,FLASHES:5,-85,12
+   🚨 FIRE ALERT FROM LIGHT DETECTOR!
+   ```
+
+#### Testi 7: Kalibrointi ja baseline
+1. ✅ Suorita baseline-kalibrointi:
+   ```cpp
+   calibrateLightBaseline();
+   ```
+2. ✅ Serial näyttää:
+   ```
+   💡 Calibrating light baseline...
+      Ensure normal lighting, no alarm LED
+      Measuring for 3 seconds...
+   .........
+   ✓ Ambient red level: 35
+     Recommended threshold: 85
+   ```
+3. ✅ Päivitä config.h jos tarpeen
+
+### Testausfunktiot
+
+**Testaa sensoria (main .ino):**
+```cpp
+#if ENABLE_LIGHT_DETECTION
+  testLightDetector();  // 10 sekunnin testi
+#endif
+```
+
+Serial output:
+```
+💡 Testing light detector...
+   Flash red LED at sensor!
+   Monitoring for 10 seconds...
+
+R:45 G:52 B:48
+R:255 G:45 B:30  🔴 RED!
+R:255 G:42 B:28  🔴 RED!
+R:50 G:55 B:51
+...
+
+✓ Test complete
+╔══════ LIGHT DETECTION ══════╗
+║ Red:            255
+║ Green:          45
+║ Blue:           30
+║ Red dominant:   YES 🔴
+║ Alarm active:   🚨 YES!
+║ Flash count:    5
+╚═════════════════════════════╝
+```
+
+### Vianmääritys
+
+| Ongelma | Syy | Ratkaisu |
+|---------|-----|----------|
+| Sensor ei löydy | I2C-virhe | Tarkista SDA/SCL kytkentä |
+| R=G=B=0 | Ei virta | Tarkista VCC ja GND |
+| Ei tunnista punaista | Threshold väärä | Laske RED_THRESHOLD arvoa |
+| Tunnistaa kaiken punaiseksi | Liian herkkä | Nosta RED_THRESHOLD |
+| Ei flash detection | Liian hidas | Tarkista FLASH_MIN/MAX_INTERVAL |
+
+### CSV-output
+
+```
+...,LIGHT_R:45,LIGHT_ALARM:0,LIGHT_ALERTS:0
+```
+
+Hälytyksen aikana:
+```
+...,LIGHT_R:255,LIGHT_ALARM:1,LIGHT_ALERTS:3
+```
+
+---
+
 ## 📋 Yhteenveto: Testausmatriisi
 
 | Feature | Status | Laitteisto? | Testausaika | Prioriteetti |
@@ -1014,13 +1426,15 @@ Lisää CSV:hen yksityiskohtaiset tilastot:
 | #3 WiFi AP | 🔲 Ei toteutettu | Ei | - | ⭐⭐ Keskitaso |
 | #4 Advanced Commands | ✅ Valmis | Kyllä (2 laitetta) | 20 min | ⭐⭐⭐ Korkea |
 | #5 Performance Monitor | ✅ Valmis | Ei | 5 min | ⭐⭐ Keskitaso |
-| #6 Watchdog Timer | ✅ **UUSI!** | Ei | 10 min | ⭐⭐ Keskitaso |
-| #7 Encryption (XOR) | ✅ **UUSI!** | Kyllä (2 laitetta) | 15 min | ⭐⭐ Keskitaso |
-| #8 Extended Telemetry | ✅ **UUSI!** | Ei | 10 min | ⭐⭐⭐ Korkea |
-| #9 Adaptive SF | ✅ **UUSI!** | Kyllä (2 laitetta) | 25 min | ⭐⭐⭐ Korkea |
-| #10 Packet Statistics | ✅ **UUSI!** | Ei | 10 min | ⭐⭐ Keskitaso |
+| #6 Watchdog Timer | ✅ Valmis | Ei | 10 min | ⭐⭐ Keskitaso |
+| #7 Encryption (XOR) | ✅ Valmis | Kyllä (2 laitetta) | 15 min | ⭐⭐ Keskitaso |
+| #8 Extended Telemetry | ✅ Valmis | Ei | 10 min | ⭐⭐⭐ Korkea |
+| #9 Adaptive SF | ✅ Valmis | Kyllä (2 laitetta) | 25 min | ⭐⭐⭐ Korkea |
+| #10 Packet Statistics | ✅ Valmis | Ei | 10 min | ⭐⭐ Keskitaso |
+| #11 Audio Detection | ✅ **UUSI!** 🔊 | Kyllä (MAX4466) | 20 min | ⭐⭐⭐⭐ Erittäin tärkeä |
+| #12 Light Detection | ✅ **UUSI!** 💡 | Kyllä (TCS34725) | 20 min | ⭐⭐⭐⭐ Erittäin tärkeä |
 
-**Yhteensä:** 9 valmista ominaisuutta, 1 tulossa (#3 WiFi AP)
+**Yhteensä:** 11 valmista ominaisuutta, 1 tulossa (#3 WiFi AP)
 
 ---
 
@@ -1069,7 +1483,19 @@ Lisää CSV:hen yksityiskohtaiset tilastot:
    - Testaa lähellä ja kaukana
    - Vaativain feature!
 
-**VAIHE 4: Myöhemmin:**
+**VAIHE 4: Sensorit (kun laitteisto saatavilla - 40 min):**
+
+10. ✅ **Feature #11: Audio Detection** (20 min) 🔊 **UUSI!**
+    - Tarvitsee: MAX4466 microphone amplifier (~3-5€)
+    - Havaitsee palovaroittimen äänen
+    - Testaa äänigeneraattorilla tai oikealla palovaroittimella
+
+11. ✅ **Feature #12: Light Detection** (20 min) 💡 **UUSI!**
+    - Tarvitsee: TCS34725 RGB sensor (~8-12€)
+    - Havaitsee vilkkuvan punaisen LEDin
+    - Testaa punaisella LED-taskulampulla tai palovaroittimella
+
+**VAIHE 5: Myöhemmin:**
 
 - ⏳ Feature #3: WiFi AP (ei vielä toteutettu)
 
@@ -1090,6 +1516,8 @@ Lisää CSV:hen yksityiskohtaiset tilastot:
 | Extended Telemetry | ⚠️ Payload kasvaa | Voi vaikuttaa kantamaan |
 | Adaptive SF | ⚠️ Monimutkainen | Testaa ensin erikseen |
 | Packet Statistics | ✅ Kyllä | Vähän muistia (~100 bytes) |
+| Audio Detection | ✅ Kyllä | Vaatii GPIO 34 (ADC1_CH6) |
+| Light Detection | ✅ Kyllä | Vaatii I2C (GPIO 21/22) |
 
 **Suositellut yhdistelmät:**
 
@@ -1114,6 +1542,13 @@ Lisää CSV:hen yksityiskohtaiset tilastot:
 - Adaptive SF
 - Extended Telemetry
 - Packet Statistics
+
+**Palovaroittimen hälytys (smoke alarm monitoring):** 🚨 **UUSI!**
+- Audio Detection (ääni)
+- Light Detection (vilkkuva LED)
+- Watchdog Timer (luotettavuus)
+- Performance Monitor (diagnostiikka)
+- Battery Monitor (jos akku)
 
 ---
 
