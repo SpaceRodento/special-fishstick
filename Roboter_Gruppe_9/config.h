@@ -165,4 +165,17 @@
 #define ENABLE_LIGHT_DETECTION false
 // I2C pins: SDA=21, SCL=22 (standard ESP32 I2C pins)
 
+// FEATURE 13: Current Monitoring (INA219)
+// Monitors battery current, voltage, and power consumption
+// Tracks total energy usage (mAh, Wh) and calculates runtime
+// Hardware: INA219 current sensor on I2C (same bus as TCS34725)
+// Connection: Battery+ → INA219 VIN+ → INA219 VIN- → ESP32 VIN
+// Requires: Adafruit_INA219 library
+// Testing: Enable and monitor current draw in serial output
+#define ENABLE_CURRENT_MONITOR false
+#define CURRENT_MONITOR_I2C_ADDR 0x40    // INA219 I2C address (default)
+#define CURRENT_CHECK_INTERVAL 10000     // Check every 10 seconds
+#define CURRENT_HIGH_THRESHOLD 200       // Warning above 200mA
+#define CURRENT_MAX_THRESHOLD 500        // Critical above 500mA
+
 #endif // CONFIG_H

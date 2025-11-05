@@ -1417,6 +1417,231 @@ Hälytyksen aikana:
 
 ---
 
+## FEATURE 13: Current Monitoring (Virrankulutuksen mittaus) ⚡
+
+**Tarkoitus:** Mittaa akun virrankulutusta, tehoa ja kokonaisenergiaa INA219-anturilla
+
+### Miksi tämä on hyödyllinen?
+
+- 📊 Näe reaaliaikainen virrankulutus (mA)
+- 🔋 Seuraa akkuun jäävä kapasiteetti (mAh)
+- ⏱️ Laske jäljellä oleva käyttöaika
+- 📈 Havaitse virrankulutuspiikit (esim. LoRa TX)
+- 🐛 Debuggaa tehonkulutusongelmia
+
+### Laitteistokytkentä
+
+```
+                        ┌─────────────┐
+Akku (+) ───────────────┤ VIN+        │
+                        │   INA219    │
+ESP32 VIN ──────────────┤ VIN-    SDA ├───── GPIO 21 (I2C Data)
+                        │         SCL ├───── GPIO 22 (I2C Clock)
+GND ─────────────────┬──┤ GND     VCC ├───── 3.3V
+                     │  └─────────────┘
+                     └─────────────────────── GND
+
+```
+
+**Tärkeää:**
+- INA219 on SARJASSA akun ja ESP32:n välissä!
+- Mittaa akusta ESP32:lle kulkeva virta
+- Käyttää samaa I2C-väylää kuin TCS34725 (light detector)
+
+### config.h -asetukset
+
+```cpp
+#define ENABLE_CURRENT_MONITOR true     // ← Muuta tämä
+#define CURRENT_MONITOR_I2C_ADDR 0x40   // I2C-osoite (oletus)
+#define CURRENT_CHECK_INTERVAL 10000    // Tarkista 10s välein
+#define CURRENT_HIGH_THRESHOLD 200      // Varoitus >200mA
+#define CURRENT_MAX_THRESHOLD 500       // Kriittinen >500mA
+```
+
+### Kirjasto
+
+**Asenna Arduino IDE:ssä:**
+1. Avaa Library Manager (Tools → Manage Libraries...)
+2. Etsi "Adafruit INA219"
+3. Asenna (asentaa automaattisesti myös "Adafruit BusIO")
+
+### Testausvaiheet
+
+#### Testi 1: Perustoiminta
+
+1. ✅ Kytke INA219 ylläolevan kaavion mukaan
+2. ✅ Asenna kirjasto (katso yllä)
+3. ✅ Lataa koodi
+4. ✅ Odota Serial outputissa:
+   ```
+   === Initializing Current Monitor ===
+   ✓ INA219 current monitor initialized
+     I2C Address: 0x40
+     Calibration: 32V, 2A range
+     Check interval: 10 seconds
+     High current warning: >200 mA
+     Overload warning: >500 mA
+   ```
+
+5. ❌ Jos näet virheen:
+   ```
+   ❌ Failed to find INA219 chip!
+      Check wiring:
+      - SDA → GPIO 21
+      - SCL → GPIO 22
+      - VCC → 3.3V
+      - GND → GND
+      Current monitoring DISABLED
+   ```
+   → Tarkista kytkennät ja I2C-osoite!
+
+#### Testi 2: Virranmittaus
+
+1. ✅ Odota 10 sekuntia
+2. ✅ Serial näyttää:
+   ```
+   ⚡ Current #1: 85.2 mA, 3.78 V, 322 mW ✓
+   ```
+3. ✅ Tarkista arvot:
+   - Current: 80-100 mA (tyypillinen WiFi/LoRa idle)
+   - Voltage: Akun jännite (~3.7V)
+   - Power: V × I (esim. 3.78V × 0.085A = 321mW)
+
+#### Testi 3: Virrankulutuspiikit
+
+1. ✅ Lähetä LoRa-viesti (Sender-moodissa automaattista)
+2. ✅ Katso hetkellinen piikki:
+   ```
+   ⚡ Current #5: 142.8 mA, 3.76 V, 537 mW ✓
+                  ↑↑↑ LoRa TX-piikki!
+   ```
+3. ✅ Tyypilliset virrat:
+   - Deep sleep: 0.01-0.15 mA
+   - CPU idle: 20-50 mA
+   - WiFi active: 80-170 mA
+   - LoRa TX: 120-140 mA (riippuu tehosta)
+
+#### Testi 4: Tilastot ja energianseuranta
+
+1. ✅ Anna laitteen olla päällä vähintään 100 sekuntia
+2. ✅ Serial näyttää 10 mittauksen välein:
+   ```
+     --- Current Statistics ---
+     Average: 89.3 mA
+     Range: 82.1 - 145.6 mA
+     Peak power: 548 mW
+     Energy used: 2.5 mAh (0.009 Wh)
+     Est. runtime (2000mAh): 22.4 hours
+     Uptime: 104 seconds
+   ```
+3. ✅ Tarkista:
+   - Average = keskimääräinen virrankulutus
+   - Energy used = kulutettu energia alusta alkaen
+   - Est. runtime = arvioitu käyttöaika 2000mAh akulla
+
+#### Testi 5: Display-integraatio
+
+Jos `ENABLE_DISPLAY_OUTPUT true`:
+
+1. ✅ TFT-näytöllä näkyy:
+   ```
+   Current: 85 mA
+   Power: 322 mW
+   Energy: 2.5 mAh
+   Voltage: 3.78 V  (jos ei BATTERY_MONITOR)
+   ```
+
+#### Testi 6: I2C-osoitteen vaihto (jos konflikti)
+
+Jos käytät useampaa INA219:a tai on osoitekonflikti:
+
+1. ✅ INA219-modulissa A0/A1 jumpperit
+2. ✅ Solder A0 → osoite 0x41
+3. ✅ Solder A1 → osoite 0x44
+4. ✅ Solder A0+A1 → osoite 0x45
+5. ✅ Päivitä config.h:
+   ```cpp
+   #define CURRENT_MONITOR_I2C_ADDR 0x41
+   ```
+
+### Testausfunktiot
+
+INA219 tarjoaa suoran lukemisen:
+
+```cpp
+#if ENABLE_CURRENT_MONITOR
+  Serial.print("Current: ");
+  Serial.print(current.current_mA, 1);
+  Serial.println(" mA");
+
+  Serial.print("Average: ");
+  Serial.print(current.currentAvg, 1);
+  Serial.println(" mA");
+
+  Serial.print("Energy used: ");
+  Serial.print(current.energyUsed_mAh, 1);
+  Serial.println(" mAh");
+#endif
+```
+
+### Vianmääritys
+
+| Ongelma | Syy | Ratkaisu |
+|---------|-----|----------|
+| "Failed to find INA219" | I2C-virhe | Tarkista SDA/SCL kytkentä |
+| Current = 0 | Ei virta sensoria läpi | Tarkista VIN+/VIN- kytkentä |
+| Liian suuri virta | Väärä kalibrointi | Käytä `setCalibration_16V_400mA()` |
+| Negatiivinen virta | Väärä suunta | Vaihda VIN+ ↔ VIN- |
+| I2C-konflikti TCS34725:n kanssa | Sama väylä | Normaali! Molemmat toimivat samalla väylällä |
+
+### CSV-output
+
+```
+...,CURRENT:85.2,VOLTAGE:3.78,POWER:322,ENERGY:2.5
+```
+
+### Kalibrointivaihtoehdot
+
+INA219 tukee eri mittausalueita:
+
+```cpp
+// current_monitor.h, muuta initCurrentMonitor():
+
+ina219.setCalibration_32V_2A();    // Oletus: 0-32V, ±3.2A
+ina219.setCalibration_32V_1A();    // Parempi resoluutio: ±1A
+ina219.setCalibration_16V_400mA(); // Matala virta: ±400mA
+```
+
+**ESP32:lle suositus:** `32V_2A` (oletus) on riittävä.
+
+### Edistynyt: Runtime-laskenta
+
+```cpp
+// Laske jäljellä oleva aika 2000mAh akulla:
+float capacity = 2000.0;  // mAh
+float runtime = getEstimatedRuntime(capacity);
+
+Serial.print("Runtime left: ");
+Serial.print(runtime, 1);
+Serial.println(" hours");
+```
+
+### Yhteensopivuus
+
+**Toimii yhdessä:**
+- ✅ Battery Monitor (molemmat mittaavat jännitettä)
+- ✅ Light Detection (sama I2C-väylä)
+- ✅ Audio Detection (eri GPIO)
+- ✅ Kaikki muut ominaisuudet
+
+**Huom:**
+- Jos `ENABLE_BATTERY_MONITOR` ja `ENABLE_CURRENT_MONITOR` molemmat päällä:
+  - Battery monitor mittaa jännitteen ADC:llä (GPIO 35)
+  - Current monitor mittaa jännitteen INA219:llä (tarkempi!)
+  - Display näyttää Battery voltage, current monitor lisää virran/tehon
+
+---
+
 ## 📋 Yhteenveto: Testausmatriisi
 
 | Feature | Status | Laitteisto? | Testausaika | Prioriteetti |
@@ -1433,8 +1658,9 @@ Hälytyksen aikana:
 | #10 Packet Statistics | ✅ Valmis | Ei | 10 min | ⭐⭐ Keskitaso |
 | #11 Audio Detection | ✅ **UUSI!** 🔊 | Kyllä (MAX4466) | 20 min | ⭐⭐⭐⭐ Erittäin tärkeä |
 | #12 Light Detection | ✅ **UUSI!** 💡 | Kyllä (TCS34725) | 20 min | ⭐⭐⭐⭐ Erittäin tärkeä |
+| #13 Current Monitor | ✅ **UUSI!** ⚡ | Kyllä (INA219) | 15 min | ⭐⭐⭐ Korkea |
 
-**Yhteensä:** 11 valmista ominaisuutta, 1 tulossa (#3 WiFi AP)
+**Yhteensä:** 12 valmista ominaisuutta, 1 tulossa (#3 WiFi AP)
 
 ---
 
@@ -1518,6 +1744,7 @@ Hälytyksen aikana:
 | Packet Statistics | ✅ Kyllä | Vähän muistia (~100 bytes) |
 | Audio Detection | ✅ Kyllä | Vaatii GPIO 34 (ADC1_CH6) |
 | Light Detection | ✅ Kyllä | Vaatii I2C (GPIO 21/22) |
+| Current Monitor | ✅ Kyllä | Vaatii I2C (GPIO 21/22), sama väylä kuin Light Detection |
 
 **Suositellut yhdistelmät:**
 
@@ -1530,6 +1757,7 @@ Hälytyksen aikana:
 - Performance Monitor
 - Extended Telemetry
 - Battery Monitor
+- Current Monitor ⚡ **UUSI!**
 - Packet Statistics
 
 **Turvallisuus + diagnostiikka:**
@@ -1549,6 +1777,7 @@ Hälytyksen aikana:
 - Watchdog Timer (luotettavuus)
 - Performance Monitor (diagnostiikka)
 - Battery Monitor (jos akku)
+- Current Monitor (tehonseuranta) ⚡
 
 ---
 

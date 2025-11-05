@@ -64,6 +64,16 @@ extern bool bRECEIVER;
   } light;
 #endif
 
+#if ENABLE_CURRENT_MONITOR
+  extern struct CurrentStatus {
+    float voltage;
+    float current_mA;
+    float power_mW;
+    float currentAvg;
+    float energyUsed_mAh;
+  } current;
+#endif
+
 // Global display client
 #if ENABLE_DISPLAY_OUTPUT
   DisplayClient display(DISPLAY_TX_PIN);
@@ -144,6 +154,17 @@ void sendDisplayUpdate() {
     #if ENABLE_BATTERY_MONITOR
       float batVoltage = readBatteryVoltage();
       display.set("Battery", String(batVoltage, 2) + "V");
+    #endif
+
+    // Current monitoring (if enabled)
+    #if ENABLE_CURRENT_MONITOR
+      display.set("Current", String(current.current_mA, 0) + "mA");
+      display.set("Power", String(current.power_mW, 0) + "mW");
+      display.set("Energy", String(current.energyUsed_mAh, 1) + "mAh");
+      // Use INA219 voltage if current monitor is enabled (more accurate)
+      #if !ENABLE_BATTERY_MONITOR
+        display.set("Voltage", String(current.voltage, 2) + "V");
+      #endif
     #endif
 
     // Extended telemetry (if enabled)

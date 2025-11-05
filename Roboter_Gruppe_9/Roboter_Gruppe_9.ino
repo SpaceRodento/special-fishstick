@@ -37,6 +37,20 @@
 #include "health_monitor.h"
 #include "display_sender.h"  // TFT display station support
 
+// Feature modules
+#if ENABLE_BATTERY_MONITOR
+  #include "battery_monitor.h"
+#endif
+#if ENABLE_AUDIO_DETECTION
+  #include "audio_detector.h"
+#endif
+#if ENABLE_LIGHT_DETECTION
+  #include "light_detector.h"
+#endif
+#if ENABLE_CURRENT_MONITOR
+  #include "current_monitor.h"
+#endif
+
 // =============== KILL-SWITCH CONFIG ================================
 // GPIO 12 is a strapping pin on ESP32 - use GPIO 13 instead!
 #define KILLSWITCH_GND_PIN 14
@@ -573,6 +587,23 @@ void setup() {
   // Display station (UART-based, works for both sender and receiver)
   initDisplaySender();
 
+  // Feature modules initialization
+  #if ENABLE_BATTERY_MONITOR
+    initBatteryMonitor();
+  #endif
+
+  #if ENABLE_AUDIO_DETECTION
+    initAudioDetector();
+  #endif
+
+  #if ENABLE_LIGHT_DETECTION
+    initLightDetector();
+  #endif
+
+  #if ENABLE_CURRENT_MONITOR
+    initCurrentMonitor();
+  #endif
+
   Serial.println("\n✓ Setup complete!\n");
 }
 
@@ -733,6 +764,23 @@ void loop() {
       printDataJSON();
     #endif
   }
+
+  // Feature modules monitoring
+  #if ENABLE_BATTERY_MONITOR
+    checkBattery();
+  #endif
+
+  #if ENABLE_AUDIO_DETECTION
+    checkAudioDetector();
+  #endif
+
+  #if ENABLE_LIGHT_DETECTION
+    checkLightDetector();
+  #endif
+
+  #if ENABLE_CURRENT_MONITOR
+    checkCurrentMonitor();
+  #endif
 
   delay(10);
 }
