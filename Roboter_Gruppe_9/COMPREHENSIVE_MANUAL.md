@@ -14,17 +14,20 @@
 2. [Quick Start](#quick-start)
 3. [Hardware Setup](#hardware-setup)
 4. [Software Installation](#software-installation)
-5. [Features & Capabilities](#features--capabilities)
-6. [LCD Display Versions](#lcd-display-versions)
-7. [Connection Watchdog](#connection-watchdog)
-8. [Kill-Switch Usage](#kill-switch-usage)
-9. [PC Data Logging](#pc-data-logging)
-10. [Troubleshooting](#troubleshooting)
-11. [Configuration Guide](#configuration-guide)
-12. [Architecture & Technical Details](#architecture--technical-details)
-13. [Development & Customization](#development--customization)
-14. [FAQ](#faq)
-15. [Reference](#reference)
+5. [Deployment Guide](#deployment-guide)
+6. [Features & Capabilities](#features--capabilities)
+7. [LCD Display Versions](#lcd-display-versions)
+8. [Connection Watchdog](#connection-watchdog)
+9. [Kill-Switch Usage](#kill-switch-usage)
+10. [PC Data Logging](#pc-data-logging)
+11. [Data Analysis & Visualization](#data-analysis--visualization)
+12. [Troubleshooting](#troubleshooting)
+13. [Configuration Guide](#configuration-guide)
+14. [Architecture & Technical Details](#architecture--technical-details)
+15. [Development & Customization](#development--customization)
+16. [Advanced Topics](#advanced-topics)
+17. [FAQ](#faq)
+18. [Reference](#reference)
 
 ---
 
@@ -307,6 +310,443 @@ After upload, open Serial Monitor (115200 baud):
 ```
 
 If you see this, installation successful! 🎉
+
+---
+
+## Deployment Guide
+
+### Production Deployment Checklist
+
+This section provides step-by-step instructions for deploying your LoRa system from development to production.
+
+#### Pre-Deployment Checklist
+
+**Hardware Verification:**
+- [ ] All connections verified with multimeter
+- [ ] LoRa modules tested individually (AT commands work)
+- [ ] LCD address verified (I2C scan)
+- [ ] Antennas securely attached
+- [ ] Power supply adequate (>500mA @ 3.3V)
+- [ ] Enclosures prepared (if outdoor deployment)
+- [ ] Backup hardware available
+
+**Software Verification:**
+- [ ] Code uploaded successfully to both devices
+- [ ] Serial Monitor shows boot messages
+- [ ] Role detection working (correct mode displayed)
+- [ ] LoRa initialization successful
+- [ ] Kill-switch tested (physical and remote)
+- [ ] Data logging tested (if using PC connection)
+
+**Configuration Verification:**
+- [ ] Network ID same on both devices (`config.h`)
+- [ ] Addresses correct (Sender=2, Receiver=1)
+- [ ] LoRa parameters set (SF12, BW125)
+- [ ] Bi-directional enabled (if needed)
+- [ ] CSV/JSON logging configured
+- [ ] Debug flags set appropriately
+
+#### Step-by-Step Deployment
+
+##### Phase 1: Lab Testing (Day 1)
+
+**1. Bench Test (1 hour)**
+```
+Distance: < 1 meter
+Environment: Indoor, controlled
+Goal: Verify basic functionality
+```
+
+**Test procedure:**
+1. Power up receiver first
+2. Check Serial Monitor: ">>> RECEIVER MODE"
+3. Verify LCD displays default screen
+4. Power up sender
+5. Check Serial Monitor: ">>> SENDER MODE"
+6. Within 5 seconds, receiver should show messages
+7. LCD should update with RSSI/SNR values
+8. Test kill-switch on both devices
+9. Verify ACK messages (check sender Serial Monitor)
+
+**Success criteria:**
+- ✅ Messages flow consistently
+- ✅ RSSI > -40 dBm (close range)
+- ✅ Packet loss < 1%
+- ✅ LCD updates smoothly
+- ✅ ACKs received every 5 messages
+
+**2. Extended Run Test (4 hours)**
+```
+Distance: < 5 meters
+Duration: 4+ hours
+Goal: Verify stability
+```
+
+**Monitor for:**
+- Memory leaks (check uptime doesn't cause crashes)
+- Connection drops
+- Packet loss trends
+- RSSI stability
+
+**Success criteria:**
+- ✅ No crashes or reboots
+- ✅ Packet loss remains < 2%
+- ✅ No memory issues
+- ✅ Connection state stays CONNECTED
+
+**3. USB Data Logging Test (1 hour)**
+```
+Connection: Receiver → PC via USB
+Goal: Verify data collection
+```
+
+**Test procedure:**
+1. Connect receiver to PC
+2. Run: `python serial_monitor.py /dev/ttyUSB0 115200`
+3. Verify colored output appears
+4. Run: `python data_logger.py /dev/ttyUSB0 115200 test.db`
+5. Let run for 1 hour
+6. Query database:
+   ```bash
+   sqlite3 test.db
+   > SELECT COUNT(*) FROM lora_messages;
+   > SELECT AVG(rssi), AVG(packet_loss) FROM lora_messages;
+   ```
+
+**Success criteria:**
+- ✅ CSV data appears in Serial Monitor
+- ✅ Database grows consistently
+- ✅ No gaps in data
+- ✅ Statistics make sense
+
+##### Phase 2: Range Testing (Day 2)
+
+**1. Line-of-Sight Test**
+```
+Distance: Progressive (10m → 100m → 500m → 1km+)
+Environment: Outdoor, minimal obstacles
+Goal: Determine maximum range
+```
+
+**Test procedure:**
+1. Start at 10 meters
+   - Verify RSSI, packet loss
+   - Move sender further if stable
+2. 50 meters
+   - Check RSSI (should be -60 to -80 dBm)
+   - Packet loss should be < 3%
+3. 100 meters
+   - RSSI around -70 to -90 dBm
+   - Packet loss < 5%
+4. 500 meters
+   - RSSI around -90 to -105 dBm
+   - Packet loss may increase to 10%
+5. 1+ km
+   - RSSI < -105 dBm
+   - Packet loss varies, may need testing
+
+**Record:**
+- Distance
+- RSSI
+- SNR
+- Packet loss %
+- Connection state
+- Environmental notes (weather, obstacles)
+
+**2. Obstacle Test**
+```
+Distance: Fixed (e.g., 50m)
+Obstacles: Walls, buildings, trees
+Goal: Understand signal attenuation
+```
+
+**Test scenarios:**
+- Through 1 wall (wood)
+- Through 2 walls
+- Through concrete wall
+- Around building corner
+- Through trees/foliage
+
+**Record RSSI drop for each obstacle type**
+
+##### Phase 3: Environmental Testing (Day 3)
+
+**1. Temperature Test**
+```
+Conditions: Various temperatures
+Goal: Verify operation range
+```
+
+**If indoor:**
+- Cold: Refrigerator (2-5°C) - 1 hour
+- Normal: Room temp (20-25°C)
+- Warm: Near heater (30-35°C) - 1 hour
+
+**Monitor for:**
+- Crashes or reboots
+- Performance degradation
+- RSSI changes
+
+**2. Interference Test**
+```
+Sources: WiFi, Bluetooth, other LoRa
+Goal: Verify network isolation
+```
+
+**Test procedure:**
+1. Baseline with no interference
+2. Turn on multiple WiFi routers nearby
+3. Run Bluetooth devices
+4. If possible, test with other LoRa devices (different network ID)
+
+**Success criteria:**
+- ✅ WiFi/Bluetooth: No impact (different frequencies)
+- ✅ Other LoRa (same freq): No impact if network ID different
+
+##### Phase 4: Load Testing (Day 4)
+
+**1. Continuous Operation**
+```
+Duration: 24 hours
+Goal: Verify long-term stability
+```
+
+**Setup:**
+- Both devices powered
+- Receiver logging to PC
+- Monitor periodically (every 2 hours)
+
+**Monitor:**
+- Uptime
+- Packet loss trends
+- Memory usage (if possible)
+- Temperature (touch ESP32 - should be warm, not hot)
+
+**Success criteria:**
+- ✅ 24 hours without crashes
+- ✅ Packet loss < 5% average
+- ✅ No thermal issues
+
+**2. Recovery Testing**
+```
+Duration: 2 hours
+Goal: Verify auto-recovery works
+```
+
+**Test procedure:**
+1. Let system run normally (CONNECTED state)
+2. Disconnect LoRa antenna from sender
+3. Wait for LOST state (8+ seconds)
+4. Reconnect antenna
+5. Verify recovery attempts start
+6. System should return to CONNECTED
+
+**Repeat:**
+- Power cycle sender (simulate crash)
+- Use kill-switch to restart
+- Move sender out of range and back
+
+**Success criteria:**
+- ✅ System recovers automatically
+- ✅ Recovery takes < 30 seconds
+- ✅ No manual intervention needed
+
+##### Phase 5: Production Deployment (Day 5+)
+
+**1. Final Preparation**
+
+**Firmware:**
+- [ ] Disable debug output (KILLSWITCH_DEBUG = false)
+- [ ] Set appropriate timeouts for your use case
+- [ ] Verify network ID is unique
+- [ ] Final code upload
+
+**Hardware:**
+- [ ] Secure all connections (consider solder instead of jumpers)
+- [ ] Weatherproof enclosures (if outdoor)
+- [ ] Label devices (SENDER/RECEIVER)
+- [ ] Backup power plan (battery, solar)
+
+**Documentation:**
+- [ ] Record device locations
+- [ ] Document network settings
+- [ ] Create maintenance schedule
+- [ ] Prepare troubleshooting guide
+
+**2. Installation**
+
+**Site survey:**
+1. Walk the deployment area
+2. Identify obstacles
+3. Plan device placement
+4. Test preliminary locations
+
+**Installation:**
+1. Install receiver first (fixed location)
+2. Power up and verify operation
+3. Install sender (mobile or fixed)
+4. Verify communication
+5. Mark RSSI and packet loss baseline
+
+**3. Post-Deployment Monitoring**
+
+**Day 1:**
+- Check every 2 hours
+- Verify messages flowing
+- Check RSSI stability
+- Test kill-switch accessibility
+
+**Week 1:**
+- Check daily
+- Download logs from PC (if logging)
+- Analyze packet loss trends
+- Check for any crashes (uptime counter)
+
+**Month 1:**
+- Check weekly
+- Analyze long-term trends
+- Plan any optimizations
+- Update documentation
+
+#### Deployment Scenarios
+
+##### Scenario 1: Indoor Building Monitoring
+
+**Use case:** Office sensors reporting to central hub
+
+**Configuration:**
+```cpp
+// Reduce transmit power (not needed indoors)
+// In lora_handler.h after init:
+sendLoRaCommand("AT+CRFOP=10");  // 10dBm instead of 15
+
+// Faster send rate (less delay needed)
+#define SEND_INTERVAL 1000  // 1 second instead of 2
+
+// Tighter timeouts (close range)
+.weakTimeout = 2000,   // 2s
+.lostTimeout = 5000,   // 5s
+```
+
+**Considerations:**
+- Walls attenuate signal
+- Metal ducts/pipes cause reflections
+- Concrete floors block signal
+- Place receiver in central location
+
+**Expected performance:**
+- Range: 50-100m through walls
+- RSSI: -60 to -90 dBm
+- Packet loss: 1-3%
+
+##### Scenario 2: Outdoor Long-Range
+
+**Use case:** Farm sensors, weather stations
+
+**Configuration:**
+```cpp
+// Maximum power
+sendLoRaCommand("AT+CRFOP=15");  // 15dBm max
+
+// Keep SF12 for maximum range
+// Current settings optimal
+
+// Longer timeouts (distance + weather)
+.weakTimeout = 5000,   // 5s
+.lostTimeout = 15000,  // 15s
+```
+
+**Considerations:**
+- Height is critical (raise antennas)
+- Weather affects signal (rain, snow)
+- Temperature extremes
+- Solar power recommended
+- Weatherproof enclosures essential
+
+**Expected performance:**
+- Range: 1-5 km line of sight
+- RSSI: -90 to -115 dBm
+- Packet loss: 5-15%
+
+##### Scenario 3: Mobile Robot Control
+
+**Use case:** RC vehicle, rover, drone
+
+**Configuration:**
+```cpp
+// Bi-directional essential
+#define ENABLE_BIDIRECTIONAL true
+#define ACK_INTERVAL 2  // More frequent ACKs
+
+// Fast reaction time
+#define SEND_INTERVAL 500  // 0.5 seconds
+
+// Aggressive recovery
+.maxRecoveryAttempts = 5
+```
+
+**Considerations:**
+- Fast-moving creates Doppler effect
+- Orientation affects antenna
+- Battery life critical
+- Kill-switch essential for safety
+- Remote kill-switch for emergency stop
+
+**Expected performance:**
+- Range: 100-500m (depends on obstacles)
+- RSSI: Varies rapidly with movement
+- Packet loss: Higher during movement (5-10%)
+
+#### Maintenance Schedule
+
+**Daily (if critical):**
+- Visual inspection (power LEDs on)
+- Check Serial Monitor for errors
+- Verify data logging
+
+**Weekly:**
+- Download and analyze logs
+- Check packet loss trends
+- Verify battery levels (if battery powered)
+- Clean enclosures (if outdoor)
+
+**Monthly:**
+- Deep inspection of connections
+- Antenna check (corrosion, damage)
+- Firmware update check
+- Performance review (vs. baseline)
+
+**Yearly:**
+- Replace batteries (preventive)
+- Check all solder joints
+- Update to latest firmware
+- Performance audit
+
+#### Common Deployment Mistakes
+
+**❌ Mistake 1: Not testing thoroughly before deployment**
+- Result: Failures in production
+- Solution: Follow all testing phases
+
+**❌ Mistake 2: Inadequate power supply**
+- Result: Random reboots, brownouts
+- Solution: Use quality power supplies rated > 500mA
+
+**❌ Mistake 3: Antenna inside metal enclosure**
+- Result: Signal blocked, no communication
+- Solution: External antenna or plastic enclosure
+
+**❌ Mistake 4: Same Network ID as neighbors**
+- Result: Interference, packet collisions
+- Solution: Change Network ID to unique value
+
+**❌ Mistake 5: No backup plan**
+- Result: System down = project failure
+- Solution: Spare devices, documented recovery procedure
+
+**❌ Mistake 6: Forgetting environmental factors**
+- Result: Rain damage, overheating
+- Solution: Weatherproof enclosures, temperature monitoring
 
 ---
 
@@ -824,6 +1264,454 @@ python data_logger.py /dev/ttyUSB0 115200 experiment1.db
 # Analyze data later
 sqlite3 experiment1.db
 > SELECT AVG(rssi), AVG(packet_loss) FROM lora_messages;
+```
+
+---
+
+## Data Analysis & Visualization
+
+### Overview
+
+Once you've collected data using `data_logger.py`, you can analyze it to gain insights into your LoRa system's performance. This section covers offline analysis tools and techniques.
+
+### Quick Analysis with SQLite
+
+**Basic statistics:**
+```sql
+-- Open database
+sqlite3 lora_data.db
+
+-- Total messages logged
+SELECT COUNT(*) FROM lora_messages;
+
+-- Average signal quality
+SELECT
+  AVG(rssi) as avg_rssi,
+  MIN(rssi) as min_rssi,
+  MAX(rssi) as max_rssi,
+  AVG(snr) as avg_snr,
+  AVG(packet_loss) as avg_loss
+FROM lora_messages;
+
+-- Connection state distribution
+SELECT
+  connection_state,
+  COUNT(*) as occurrences,
+  ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM lora_messages), 2) as percentage
+FROM lora_messages
+GROUP BY connection_state;
+
+-- Packet loss over time (hourly)
+SELECT
+  DATETIME((timestamp - MIN(timestamp)) / 3600000, 'unixepoch') as hour,
+  AVG(packet_loss) as avg_loss
+FROM lora_messages
+GROUP BY hour
+ORDER BY hour;
+
+-- RSSI histogram (10 dBm bins)
+SELECT
+  (rssi / 10) * 10 as rssi_bin,
+  COUNT(*) as count
+FROM lora_messages
+GROUP BY rssi_bin
+ORDER BY rssi_bin;
+```
+
+### Python Analysis Script
+
+**analyze_data.py** - Comprehensive analysis tool
+
+Create this script in your `Roboter_Gruppe_9/` folder:
+
+```python
+#!/usr/bin/env python3
+"""
+analyze_data.py - LoRa Data Analysis Tool
+
+Analyzes SQLite database from data_logger.py and generates:
+- Statistical summary
+- RSSI/SNR plots
+- Packet loss trends
+- Connection state timeline
+- PDF report
+
+Usage:
+    python analyze_data.py lora_data.db
+    python analyze_data.py lora_data.db --output report.pdf
+"""
+
+import sqlite3
+import sys
+from datetime import datetime
+import argparse
+
+# Optional imports (install if needed)
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    from matplotlib.backends.backend_pdf import PdfPages
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+    print("⚠️  Matplotlib not installed. Plots disabled.")
+    print("   Install with: pip install matplotlib")
+
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    print("⚠️  Pandas not installed. Advanced analysis disabled.")
+    print("   Install with: pip install pandas")
+
+
+def load_data(db_file):
+    """Load data from SQLite database"""
+    conn = sqlite3.connect(db_file)
+
+    if HAS_PANDAS:
+        df = pd.read_sql_query("SELECT * FROM lora_messages", conn,
+                                parse_dates=['timestamp'])
+        return df
+    else:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM lora_messages")
+        data = cursor.fetchall()
+        conn.close()
+        return data
+
+
+def print_summary(db_file):
+    """Print statistical summary"""
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+
+    print("\n" + "="*60)
+    print("  LoRa System Analysis Report")
+    print("="*60)
+
+    # Basic info
+    cursor.execute("SELECT COUNT(*) FROM lora_messages")
+    total = cursor.fetchone()[0]
+    print(f"\n📊 Dataset:")
+    print(f"   Total records: {total}")
+
+    if total == 0:
+        print("   ⚠️  No data in database!")
+        return
+
+    cursor.execute("SELECT MIN(timestamp), MAX(timestamp) FROM lora_messages")
+    start, end = cursor.fetchone()
+    duration = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds()
+    print(f"   Duration: {duration/3600:.1f} hours")
+    print(f"   Start: {start}")
+    print(f"   End: {end}")
+
+    # RSSI statistics
+    cursor.execute("""
+        SELECT AVG(rssi), MIN(rssi), MAX(rssi),
+               AVG(snr), MIN(snr), MAX(snr)
+        FROM lora_messages
+    """)
+    rssi_avg, rssi_min, rssi_max, snr_avg, snr_min, snr_max = cursor.fetchone()
+
+    print(f"\n📡 Signal Quality:")
+    print(f"   RSSI: avg={rssi_avg:.1f} dBm, min={rssi_min} dBm, max={rssi_max} dBm")
+    print(f"   SNR:  avg={snr_avg:.1f} dB, min={snr_min} dB, max={snr_max} dB")
+
+    # Signal quality assessment
+    if rssi_avg > -70:
+        quality = "Excellent"
+    elif rssi_avg > -90:
+        quality = "Good"
+    elif rssi_avg > -105:
+        quality = "Fair"
+    else:
+        quality = "Poor"
+    print(f"   Overall quality: {quality}")
+
+    # Packet loss
+    cursor.execute("SELECT AVG(packet_loss), MAX(packet_loss) FROM lora_messages")
+    loss_avg, loss_max = cursor.fetchone()
+    print(f"\n📦 Packet Loss:")
+    print(f"   Average: {loss_avg:.2f}%")
+    print(f"   Maximum: {loss_max:.2f}%")
+
+    if loss_avg < 1:
+        print(f"   Assessment: Excellent (< 1%)")
+    elif loss_avg < 5:
+        print(f"   Assessment: Good (1-5%)")
+    elif loss_avg < 10:
+        print(f"   Assessment: Fair (5-10%)")
+    else:
+        print(f"   Assessment: Poor (> 10%)")
+
+    # Connection states
+    cursor.execute("""
+        SELECT connection_state, COUNT(*),
+               ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM lora_messages), 2)
+        FROM lora_messages
+        GROUP BY connection_state
+    """)
+
+    print(f"\n🔗 Connection States:")
+    for state, count, pct in cursor.fetchall():
+        print(f"   {state:10s}: {count:6d} ({pct:5.2f}%)")
+
+    # Messages per hour
+    avg_rate = total / (duration / 3600) if duration > 0 else 0
+    print(f"\n⏱️  Message Rate:")
+    print(f"   Average: {avg_rate:.1f} messages/hour")
+
+    conn.close()
+    print("\n" + "="*60 + "\n")
+
+
+def plot_rssi_timeline(df, ax):
+    """Plot RSSI over time"""
+    ax.plot(df['timestamp'], df['rssi'], 'b-', alpha=0.7, linewidth=0.5)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('RSSI (dBm)')
+    ax.set_title('Signal Strength Over Time')
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+    # Add quality zones
+    ax.axhspan(-120, -105, alpha=0.1, color='red', label='Poor')
+    ax.axhspan(-105, -90, alpha=0.1, color='yellow', label='Fair')
+    ax.axhspan(-90, -70, alpha=0.1, color='lightgreen', label='Good')
+    ax.axhspan(-70, -40, alpha=0.1, color='green', label='Excellent')
+
+
+def plot_packet_loss(df, ax):
+    """Plot packet loss over time"""
+    ax.plot(df['timestamp'], df['packet_loss'], 'r-', alpha=0.7)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Packet Loss (%)')
+    ax.set_title('Packet Loss Over Time')
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    ax.set_ylim(bottom=0)
+
+
+def plot_rssi_histogram(df, ax):
+    """Plot RSSI distribution"""
+    ax.hist(df['rssi'], bins=30, color='blue', alpha=0.7, edgecolor='black')
+    ax.set_xlabel('RSSI (dBm)')
+    ax.set_ylabel('Frequency')
+    ax.set_title('RSSI Distribution')
+    ax.grid(True, alpha=0.3, axis='y')
+
+    # Add mean line
+    mean_rssi = df['rssi'].mean()
+    ax.axvline(mean_rssi, color='red', linestyle='--', linewidth=2,
+               label=f'Mean: {mean_rssi:.1f} dBm')
+    ax.legend()
+
+
+def plot_connection_states(df, ax):
+    """Plot connection state timeline"""
+    # Map states to numbers for plotting
+    state_map = {'OK': 3, 'WEAK': 2, 'LOST': 1, 'UNKNOWN': 0}
+    df['state_num'] = df['connection_state'].map(state_map)
+
+    ax.plot(df['timestamp'], df['state_num'], 'g-', linewidth=1)
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Connection State')
+    ax.set_yticks([0, 1, 2, 3])
+    ax.set_yticklabels(['UNKNOWN', 'LOST', 'WEAK', 'OK'])
+    ax.set_title('Connection State Timeline')
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+
+    # Color background
+    ax.axhspan(-0.5, 0.5, alpha=0.2, color='gray')
+    ax.axhspan(0.5, 1.5, alpha=0.2, color='red')
+    ax.axhspan(1.5, 2.5, alpha=0.2, color='yellow')
+    ax.axhspan(2.5, 3.5, alpha=0.2, color='green')
+
+
+def generate_plots(df, output_file=None):
+    """Generate all plots"""
+    if not HAS_MATPLOTLIB:
+        print("⚠️  Matplotlib not installed. Cannot generate plots.")
+        return
+
+    print("📊 Generating plots...")
+
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle('LoRa System Performance Analysis', fontsize=16, fontweight='bold')
+
+    plot_rssi_timeline(df, ax1)
+    plot_packet_loss(df, ax2)
+    plot_rssi_histogram(df, ax3)
+    plot_connection_states(df, ax4)
+
+    plt.tight_layout()
+
+    if output_file:
+        print(f"💾 Saving to {output_file}...")
+        if output_file.endswith('.pdf'):
+            with PdfPages(output_file) as pdf:
+                pdf.savefig(fig)
+        else:
+            plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"✓ Saved: {output_file}")
+    else:
+        plt.show()
+
+    plt.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Analyze LoRa data from SQLite database')
+    parser.add_argument('database', help='SQLite database file')
+    parser.add_argument('--output', '-o', help='Output file for plots (PDF or PNG)')
+    parser.add_argument('--no-plots', action='store_true', help='Skip plot generation')
+
+    args = parser.parse_args()
+
+    # Check if database exists
+    try:
+        conn = sqlite3.connect(args.database)
+        conn.close()
+    except sqlite3.Error as e:
+        print(f"❌ Error: Cannot open database '{args.database}'")
+        print(f"   {e}")
+        sys.exit(1)
+
+    # Print summary
+    print_summary(args.database)
+
+    # Generate plots
+    if not args.no_plots and HAS_MATPLOTLIB and HAS_PANDAS:
+        df = load_data(args.database)
+        if len(df) > 0:
+            generate_plots(df, args.output)
+
+    print("✓ Analysis complete!\n")
+
+
+if __name__ == '__main__':
+    main()
+```
+
+Save this script and use it after collecting data.
+
+### Using the Analysis Script
+
+**Install dependencies:**
+```bash
+pip install matplotlib pandas
+```
+
+**Basic usage:**
+```bash
+# Print summary only
+python analyze_data.py lora_data.db --no-plots
+
+# Show interactive plots
+python analyze_data.py lora_data.db
+
+# Save plots to PDF
+python analyze_data.py lora_data.db --output report.pdf
+
+# Save plots to PNG
+python analyze_data.py lora_data.db --output charts.png
+```
+
+**The script generates:**
+1. **Statistical summary** - Printed to console
+2. **RSSI timeline** - Signal strength over time with quality zones
+3. **Packet loss plot** - Loss percentage trends
+4. **RSSI histogram** - Distribution of signal strengths
+5. **Connection state timeline** - Visual state changes
+
+### Advanced Analysis Examples
+
+**Correlation between RSSI and packet loss:**
+```python
+import sqlite3
+import pandas as pd
+import matplotlib.pyplot as plt
+
+conn = sqlite3.connect('lora_data.db')
+df = pd.read_sql_query("SELECT rssi, packet_loss FROM lora_messages", conn)
+
+plt.scatter(df['rssi'], df['packet_loss'], alpha=0.5)
+plt.xlabel('RSSI (dBm)')
+plt.ylabel('Packet Loss (%)')
+plt.title('RSSI vs Packet Loss')
+plt.grid(True)
+plt.show()
+```
+
+**Hourly statistics:**
+```python
+df = pd.read_sql_query("SELECT * FROM lora_messages", conn,
+                        parse_dates=['timestamp'])
+df['hour'] = df['timestamp'].dt.hour
+
+hourly = df.groupby('hour').agg({
+    'rssi': ['mean', 'min', 'max'],
+    'packet_loss': 'mean',
+    'message_count': 'count'
+})
+
+print(hourly)
+```
+
+**Export to CSV for Excel:**
+```python
+conn = sqlite3.connect('lora_data.db')
+df = pd.read_sql_query("SELECT * FROM lora_messages", conn)
+df.to_csv('lora_export.csv', index=False)
+print("✓ Exported to lora_export.csv")
+```
+
+### Visualization Tips
+
+**What to look for:**
+
+1. **RSSI Timeline:**
+   - Stable = Good deployment
+   - Fluctuating = Movement or interference
+   - Dropping trend = Battery dying or distance increasing
+
+2. **Packet Loss:**
+   - Spikes correlate with RSSI drops
+   - Gradual increase = Failing hardware
+   - Periodic = Interference source
+
+3. **Connection States:**
+   - Mostly green (OK) = Healthy system
+   - Yellow (WEAK) periods = Investigate cause
+   - Red (LOST) = Critical issue
+
+4. **RSSI Histogram:**
+   - Single peak = Stable conditions
+   - Two peaks = Two distinct scenarios (e.g., mobile device)
+   - Spread out = Unstable environment
+
+### Performance Benchmarks
+
+**Typical good results:**
+```
+RSSI:         -70 dBm average (indoor)
+              -95 dBm average (outdoor 1km)
+Packet Loss:  < 2% (indoor)
+              < 10% (outdoor)
+Connection:   > 95% in OK state
+Uptime:       24+ hours no crashes
+```
+
+**Red flags:**
+```
+RSSI:         < -110 dBm consistently
+Packet Loss:  > 20%
+Connection:   Frequent state changes
+Crashes:      Any unexpected reboots
 ```
 
 ---
@@ -1415,57 +2303,503 @@ void processRemoteKillSwitch(String payload) {
 }
 ```
 
-### Extending to 3+ Devices
+---
 
-**Concept:** Mesh network with routing
+## Advanced Topics
 
+This section covers advanced architectural concepts, performance optimization, and security features that go beyond basic usage.
+
+### Mesh Networking (3+ Devices)
+
+**Concept:** Multi-hop routing for extended range and reliability
+
+**Basic Mesh Architecture:**
 ```cpp
 // Each device gets unique address
-#define MY_ADDRESS 1  // This device
-#define NETWORK_ID 6  // Same for all
+#define MY_ADDRESS 1  // This device (1, 2, 3...)
+#define NETWORK_ID 6  // Same for all devices in mesh
 
-// Routing table
+// Routing table structure
 struct Route {
-  uint8_t destination;
-  uint8_t nextHop;
-  int rssi;
+  uint8_t destination;    // Final destination address
+  uint8_t nextHop;        // Next device to forward to
+  int rssi;               // Signal quality to next hop
+  unsigned long lastSeen; // Timestamp for route aging
 };
+
+Route routingTable[MAX_DEVICES];
 ```
 
-**Implementation outline:**
-1. Broadcast discovery packets
-2. Build routing table
-3. Forward packets not for me
-4. Update routes based on RSSI
-5. Handle route failures
+**Implementation Steps:**
 
-*Full mesh implementation beyond scope of this manual.*
+1. **Discovery Phase:**
+```cpp
+// Broadcast "HELLO" packets periodically
+String helloPacket = "HELLO," + String(MY_ADDRESS) +
+                     ",RSSI:" + String(WiFi.RSSI());
+sendLoRaMessage(helloPacket, LORA_BROADCAST_ADDR);
+
+// Listen for responses and build neighbor table
+void processHello(String payload, int rssi, uint8_t sender) {
+  addNeighbor(sender, rssi);
+  updateRoutingTable(sender, sender, rssi);  // Direct route
+}
+```
+
+2. **Packet Forwarding:**
+```cpp
+void forwardPacket(String payload, uint8_t destination) {
+  // Check if packet is for me
+  if (destination == MY_ADDRESS) {
+    processPacket(payload);
+    return;
+  }
+
+  // Find route in table
+  Route* route = findRoute(destination);
+  if (route != NULL) {
+    // Forward to next hop
+    sendLoRaMessage(payload, route->nextHop);
+    Serial.print("→ Forwarding to device ");
+    Serial.println(route->nextHop);
+  } else {
+    Serial.println("⚠ No route to destination");
+  }
+}
+```
+
+3. **Route Maintenance:**
+```cpp
+void maintainRoutes() {
+  unsigned long now = millis();
+
+  // Age out old routes (>60 seconds)
+  for (int i = 0; i < MAX_DEVICES; i++) {
+    if (routingTable[i].destination != 0 &&
+        now - routingTable[i].lastSeen > 60000) {
+      Serial.print("✗ Route to ");
+      Serial.print(routingTable[i].destination);
+      Serial.println(" expired");
+      routingTable[i].destination = 0;  // Invalidate route
+    }
+  }
+
+  // Request route updates if needed
+  if (now - lastDiscovery > 30000) {  // Every 30 seconds
+    sendDiscoveryPacket();
+    lastDiscovery = now;
+  }
+}
+```
+
+**Mesh Network Challenges:**
+- **Packet loops:** Add TTL field, decrement on each hop
+- **Bandwidth:** Each forwarded packet uses air time
+- **Latency:** Multi-hop adds delay (1-2 seconds per hop)
+- **Power:** Forwarding drains battery faster
+- **Route changes:** Handle device mobility/failure
+
+**Example 3-Device Setup:**
+```
+Device 1 (Base)  ←→  Device 2 (Relay)  ←→  Device 3 (Remote)
+   [1000m]               [1000m]
+
+Device 1 can reach Device 3 through Device 2 as relay
+```
+
+*Full mesh implementation is beyond the scope of this manual. See LoRaMesh or Meshtastic projects for complete implementations.*
 
 ### Power Optimization
 
-**Deep Sleep (ESP32):**
+**Goal:** Extend battery life from ~7 hours to 100+ hours
+
+#### Deep Sleep Mode
+
+**Basic Deep Sleep:**
 ```cpp
 #include <esp_sleep.h>
 
-// Send message, then sleep
-sendLoRaMessage(payload, TARGET_ADDRESS);
-esp_sleep_enable_timer_wakeup(10 * 1000000);  // 10 seconds
-esp_deep_sleep_start();
+void enterDeepSleep(int seconds) {
+  Serial.println("💤 Entering deep sleep...");
+  Serial.flush();  // Wait for serial to finish
+
+  // Configure wake-up timer
+  esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);  // Microseconds
+
+  // Optional: Configure wake on GPIO
+  // esp_sleep_enable_ext0_wakeup(GPIO_NUM_13, 0);  // Wake on LOW
+
+  // Enter deep sleep (resets ESP32 on wake)
+  esp_deep_sleep_start();
+}
+
+void loop() {
+  // Send data
+  sendLoRaMessage(payload, TARGET_ADDRESS);
+
+  // Sleep for 10 seconds
+  enterDeepSleep(10);
+
+  // Code here never runs - deep sleep resets the chip!
+}
+```
+
+**Deep Sleep Power Savings:**
+| Mode | Current Draw | Power @3.3V | Notes |
+|------|-------------|-------------|-------|
+| Active (WiFi ON) | ~150 mA | ~500 mW | Default mode |
+| Active (WiFi OFF) | ~80 mA | ~264 mW | WiFi disabled |
+| Light Sleep | ~15 mA | ~50 mW | CPU halted, RAM retained |
+| Deep Sleep | ~10 µA | ~33 µW | Everything off except RTC |
+
+**Battery Life Calculation:**
+```
+1000 mAh battery:
+
+Continuous active:  1000 mAh / 150 mA = 6.7 hours
+Continuous sleep:   1000 mAh / 0.01 mA = 100,000 hours (11 years!)
+
+Duty cycle (1 sec active, 59 sec sleep):
+Avg current = (1/60 × 150 mA) + (59/60 × 0.01 mA) ≈ 2.5 mA
+Battery life = 1000 / 2.5 = 400 hours (16 days)
+```
+
+#### Persistent Data (RTC Memory)
+
+**Problem:** Deep sleep clears RAM
+**Solution:** Use RTC memory (8 KB survives deep sleep)
+
+```cpp
+RTC_DATA_ATTR int messageCount = 0;      // Survives deep sleep
+RTC_DATA_ATTR int sequenceNumber = 0;
+
+void setup() {
+  // messageCount retains value after wake from deep sleep!
+  Serial.print("Wake count: ");
+  Serial.println(messageCount++);
+}
+```
+
+#### Light Sleep (Alternative)
+
+**Pros:** Faster wake, RAM retained
+**Cons:** Higher power (~15 mA vs 10 µA)
+
+```cpp
+void enterLightSleep(int seconds) {
+  // Configure timer wake source
+  esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
+
+  // Enter light sleep (resumes from here after wake)
+  esp_light_sleep_start();
+
+  // Code continues after wake!
+  Serial.println("✓ Woke from light sleep");
+}
+```
+
+#### Optimizing LoRa for Low Power
+
+```cpp
+// Reduce transmit power (default = 15 dBm)
+sendATCommand("AT+CRFOP=10");  // 10 dBm saves ~30 mA
+
+// Increase send interval
+#define SEND_INTERVAL 60000  // 60 seconds instead of 2 seconds
+
+// Use lower spreading factor if range allows
+// SF7 uses 1/3 the air time of SF12 → less TX current
+```
+
+**Power Budget Example:**
+```
+Active time per cycle:  2 seconds
+Sleep time per cycle:   58 seconds
+Cycle time:            60 seconds
+
+Active phase:  150 mA × 2s   = 300 mAs
+Sleep phase:   0.01 mA × 58s = 0.58 mAs
+Total per cycle:               300.58 mAs
+
+Cycles per hour: 3600 / 60 = 60
+Current per hour: 300.58 × 60 / 3600 = 5 mA average
+
+1000 mAh battery: 1000 / 5 = 200 hours (8.3 days)
+```
+
+### Over-The-Air (OTA) Updates
+
+**Concept:** Update firmware wirelessly without USB cable
+
+**Basic OTA Setup:**
+
+```cpp
+#include <WiFi.h>
+#include <ArduinoOTA.h>
+
+void setup() {
+  // Connect to WiFi
+  WiFi.begin("SSID", "password");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+  }
+
+  // Configure OTA
+  ArduinoOTA.setHostname("lora-sender-01");
+  ArduinoOTA.setPassword("secure_password");
+
+  ArduinoOTA.onStart([]() {
+    Serial.println("🔄 OTA Update Starting...");
+  });
+
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\n✓ OTA Update Complete!");
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.print("❌ OTA Error: ");
+    Serial.println(error);
+  });
+
+  ArduinoOTA.begin();
+  Serial.println("✓ OTA Ready");
+}
+
+void loop() {
+  ArduinoOTA.handle();  // Check for OTA updates
+  // ... rest of code
+}
+```
+
+**Uploading via OTA:**
+```bash
+# Arduino IDE: Tools → Port → Network Port → lora-sender-01
+# Or via CLI:
+python ~/.arduino15/packages/esp32/tools/esptool_py/*/espota.py \
+  -i 192.168.1.100 -p 3232 --auth=secure_password \
+  -f Roboter_Gruppe_9.ino.bin
 ```
 
 **Considerations:**
-- WiFi/Bluetooth disabled → saves 80 mA
-- CPU halted → saves 40 mA
-- Wake time ~1-2 seconds
-- RAM contents lost
-- Use RTC memory for persistence
+- Requires WiFi (increases power consumption)
+- Can enable WiFi only when needed (e.g., on button press)
+- OTA partition needs ~1.3 MB flash space
+- Useful for deployed devices in hard-to-reach locations
 
-**Battery life estimate:**
+### Data Encryption
+
+**Why:** Prevent eavesdropping and tampering
+
+**Simple XOR Encryption (Lightweight):**
+
+```cpp
+String xorEncrypt(String data, uint8_t key) {
+  String encrypted = "";
+  for (int i = 0; i < data.length(); i++) {
+    encrypted += char(data[i] ^ key);
+  }
+  return encrypted;
+}
+
+// Sender
+String payload = "LED:1,TEMP:25.5";
+String encrypted = xorEncrypt(payload, 0xA5);  // Key = 0xA5
+sendLoRaMessage(encrypted, TARGET_ADDRESS);
+
+// Receiver
+String encrypted = receiveLoRaMessage();
+String decrypted = xorEncrypt(encrypted, 0xA5);  // Same key
 ```
-Active mode:     ~150 mA @ 3.3V → ~500 mW
-Deep sleep:      ~10 mA @ 3.3V → ~33 mW
-1000 mAh battery → ~6-7 hours active, ~100 hours sleeping
+
+**⚠️ Warning:** XOR is NOT secure against serious attacks! Use for obfuscation only.
+
+**AES Encryption (Secure):**
+
+```cpp
+#include <mbedtls/aes.h>
+
+mbedtls_aes_context aes;
+uint8_t key[16] = {0x2b, 0x7e, 0x15, ...};  // 128-bit key
+
+void encryptAES(uint8_t* input, uint8_t* output, int len) {
+  mbedtls_aes_init(&aes);
+  mbedtls_aes_setkey_enc(&aes, key, 128);
+  mbedtls_aes_crypt_ecb(&aes, MBEDTLS_AES_ENCRYPT, input, output);
+  mbedtls_aes_free(&aes);
+}
+
+// Use for sensitive data (coordinates, commands)
 ```
+
+**Trade-offs:**
+- Encryption adds CPU time (~5-10 ms per packet)
+- Increases packet size (padding required)
+- Key management complexity
+- AES reduces air time vs no encryption
+
+### Adaptive Spreading Factor
+
+**Concept:** Automatically adjust SF based on signal quality for optimal throughput
+
+```cpp
+int currentSF = 12;  // Start with max range
+
+void adaptSpreadingFactor(int rssi) {
+  int targetSF = currentSF;
+
+  // Strong signal → decrease SF (faster speed)
+  if (rssi > -80 && currentSF > 7) {
+    targetSF = currentSF - 1;
+  }
+  // Weak signal → increase SF (better range)
+  else if (rssi < -105 && currentSF < 12) {
+    targetSF = currentSF + 1;
+  }
+
+  if (targetSF != currentSF) {
+    currentSF = targetSF;
+    String cmd = "AT+PARAMETER=" + String(currentSF) + ",7,1,4";
+    sendATCommand(cmd);
+    Serial.print("📡 SF adjusted to: ");
+    Serial.println(currentSF);
+  }
+}
+
+void loop() {
+  // In receiver
+  if (receiveLoRaMessage(remote, payload)) {
+    adaptSpreadingFactor(remote.rssi);
+    // Process message...
+  }
+}
+```
+
+**Benefits:**
+- SF7 at close range: 5.5 kbps (11× faster than SF12)
+- SF12 at long range: 0.5 kbps (maximum sensitivity)
+- Automatic optimization as distance changes
+- Reduces air time (less collisions, better battery)
+
+**Challenges:**
+- Both devices must sync SF changes
+- Need handshake protocol for SF negotiation
+- Temporary packet loss during SF transition
+
+### Performance Monitoring
+
+**Track system health metrics:**
+
+```cpp
+struct PerformanceMetrics {
+  unsigned long uptimeSeconds;
+  int freeHeapKB;
+  int minFreeHeapKB;
+  float cpuUsage;
+  int loopFrequency;
+  int packetQueueDepth;
+};
+
+PerformanceMetrics perf;
+
+void updatePerformanceMetrics() {
+  perf.uptimeSeconds = millis() / 1000;
+  perf.freeHeapKB = ESP.getFreeHeap() / 1024;
+  perf.minFreeHeapKB = ESP.getMinFreeHeap() / 1024;
+
+  // CPU usage estimation
+  static unsigned long lastLoopTime = 0;
+  static int loopCount = 0;
+  loopCount++;
+
+  if (millis() - lastLoopTime >= 1000) {
+    perf.loopFrequency = loopCount;
+    loopCount = 0;
+    lastLoopTime = millis();
+  }
+}
+
+void printPerformanceReport() {
+  Serial.println("\n╔══════════ PERFORMANCE ══════════╗");
+  Serial.print("║ Uptime:     ");
+  Serial.print(perf.uptimeSeconds / 3600);
+  Serial.println(" hours");
+  Serial.print("║ Free RAM:   ");
+  Serial.print(perf.freeHeapKB);
+  Serial.println(" KB");
+  Serial.print("║ Min RAM:    ");
+  Serial.print(perf.minFreeHeapKB);
+  Serial.println(" KB");
+  Serial.print("║ Loop freq:  ");
+  Serial.print(perf.loopFrequency);
+  Serial.println(" Hz");
+  Serial.println("╚═════════════════════════════════╝");
+}
+```
+
+**Memory Leak Detection:**
+```cpp
+// Call every 10 seconds
+if (ESP.getMinFreeHeap() < MEMORY_WARNING_THRESHOLD) {
+  Serial.println("⚠️ LOW MEMORY WARNING!");
+  // Possible memory leak - investigate
+}
+```
+
+### Emergency Recovery Features
+
+**Watchdog Timer (Auto-Reboot on Hang):**
+
+```cpp
+#include <esp_task_wdt.h>
+
+void setup() {
+  // Configure watchdog (10 second timeout)
+  esp_task_wdt_init(10, true);  // 10s, panic on timeout
+  esp_task_wdt_add(NULL);       // Add current task
+
+  Serial.println("✓ Watchdog enabled");
+}
+
+void loop() {
+  // Reset watchdog every loop iteration
+  esp_task_wdt_reset();
+
+  // If loop hangs for >10s, ESP32 reboots automatically
+  // ... rest of code
+}
+```
+
+**Remote Diagnostic Commands:**
+
+```cpp
+void processRemoteCommand(String cmd) {
+  if (cmd == "CMD:STATUS") {
+    // Send full status report
+    sendStatusReport();
+  }
+  else if (cmd == "CMD:RESET_STATS") {
+    // Reset packet counters
+    health.packetsReceived = 0;
+    health.packetsLost = 0;
+    Serial.println("✓ Statistics reset");
+  }
+  else if (cmd == "CMD:SET_SF:9") {
+    // Change spreading factor remotely
+    int sf = cmd.substring(11).toInt();
+    updateSpreadingFactor(sf);
+  }
+  else if (cmd == "CMD:PING") {
+    // Simple ping/pong for connectivity test
+    sendLoRaMessage("PONG", senderAddress);
+  }
+}
+```
+
+**Further Reading:**
+- ESP32 Technical Reference Manual (power modes)
+- LoRaWAN Specification (mesh networking standards)
+- Meshtastic Project (open-source LoRa mesh)
+- RadioHead Library (advanced packet radio)
 
 ---
 
