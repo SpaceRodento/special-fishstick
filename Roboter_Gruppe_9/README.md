@@ -72,12 +72,12 @@ Role (sender/receiver) is automatically detected using a jumper wire:
 - `data_logger.py` - SQLite database logger for data analysis
 
 ### Documentation
-- `README.md` - This file, project overview
-- `PC_LOGGING_README.md` - **PC data logging guide with Python scripts**
-- `LCD_VERSIONS.md` - Detailed guide for all 4 LCD display versions
-- `STATUS_SUMMARY.md` - Current project status and features
-- `WATCHDOG_GUIDE.md` - Connection watchdog and health monitoring guide
-- `FUTURE_DEVELOPMENT.md` - Development roadmap
+- `README.md` - This file, project overview and quick start
+- **`COMPREHENSIVE_MANUAL.md`** - **📖 Complete guide** (troubleshooting, setup, advanced features)
+- `PC_LOGGING_README.md` - PC data logging guide with Python scripts
+- `archive/` - Archived documentation (LCD versions, watchdog guide, etc.)
+
+> 💡 **For detailed instructions**, see `COMPREHENSIVE_MANUAL.md`
 
 ### Reference/Testing
 - `RYLR896_simple.ino` - Simple test code for basic LoRa validation
