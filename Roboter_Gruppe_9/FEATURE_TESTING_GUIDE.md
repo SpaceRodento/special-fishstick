@@ -504,70 +504,530 @@ Tämä ominaisuus on valmisteltu, mutta vaatii:
 ### config.h -asetukset
 
 ```cpp
-#define ENABLE_WATCHDOG true  // ← Muuta tämä
+#define ENABLE_WATCHDOG true   // ← Muuta tämä
 #define WATCHDOG_TIMEOUT_S 10  // 10 sekuntia
 ```
 
-### ⚠️ HUOM: Vaatii implementoinnin!
+### Testausvaiheet
 
-Tämä ominaisuus on valmisteltu, mutta vaatii:
-1. `#include <esp_task_wdt.h>` main .ino:ssa
-2. `esp_task_wdt_init()` setup():issa
-3. `esp_task_wdt_reset()` loop():issa
+#### Testi 1: Perustoiminta
+1. ✅ Lataa koodi
+2. ✅ Odota Serial outputissa:
+   ```
+   🐕 Initializing watchdog timer (10s timeout)...
+   ✓ Watchdog timer enabled
+     System will auto-reboot if loop() hangs
+     Timeout: 10 seconds
+     ⚠️  IMPORTANT: loop() must run smoothly!
+   ```
 
-**Kun toteutetaan:**
-1. ✅ Watchdog käynnistyy
-2. ✅ Jos loop() ei kutsuttu 10 sekuntiin → reboot
-3. ✅ Serial: "Brownout detector was triggered" TAI watchdog-viesti
+#### Testi 2: Normaali toiminta
+1. ✅ Anna laitteen pyöriä 5-10 minuuttia
+2. ✅ Ei pitäisi reboot:ata
+3. ✅ Watchdog resetoidaan joka loop-kierroksella
 
-**Testaus tulee myöhemmin!**
+#### Testi 3: Jumittumistesti (VAROITUS: Tämä rebootaa!)
+1. ✅ Lisää väliaikaisesti koodiin (loop():iin):
+   ```cpp
+   #if ENABLE_WATCHDOG
+     extern void testWatchdogTimeout();
+     testWatchdogTimeout();  // Kutsuu vain kerran
+   #endif
+   ```
+2. ✅ Lataa koodi
+3. ✅ Serial näyttää:
+   ```
+   ⚠️⚠️⚠️ WATCHDOG TEST MODE ⚠️⚠️⚠️
+   Simulating system hang...
+   ESP32 will reboot in 10 seconds
+   This is a TEST - do not use in production!
+   ..........
+   ```
+4. ✅ 10 sekunnin kuluttua: ESP32 rebootaa
+5. ✅ Serial: "rst:0x8 (TG1WDT_SYS_RESET),boot:0x..."
+6. ✅ Poista testifunktion kutsu!
+
+#### Testi 4: Tilastot
+1. ✅ Tulosta watchdog-tilastot:
+   ```cpp
+   extern void printWatchdogStats();
+   printWatchdogStats();  // Kutsu esim. 1× minuutissa
+   ```
+2. ✅ Serial näyttää:
+   ```
+   ╔═══════ WATCHDOG STATISTICS ═══════╗
+   ║ Status:          ENABLED ✓
+   ║ Timeout:         10 seconds
+   ║ Total resets:    12345
+   ║ Last reset:      0 s ago
+   ║ Max interval:    85 ms
+   ║ Max usage:       0.8% of timeout ✓
+   ║ Safety margin:   9915 ms
+   ╚═══════════════════════════════════╝
+   ```
+
+#### Testi 5: Varoitukset
+1. ✅ Jos loop() hidastuu (max interval > 8 seconds):
+   ```
+   ⚠️  Watchdog: Long interval (8500 ms, timeout in 1500 ms)
+   ```
+
+### Mahdolliset ongelmat
+
+| Ongelma | Syy | Ratkaisu |
+|---------|-----|----------|
+| Ei rebootaa jumissa | Feature disabled | Tarkista config.h |
+| Rebootaa heti | Timeout liian lyhyt | Kasvata WATCHDOG_TIMEOUT_S |
+| False triggers | Loop() liian hidas | Poista delay(), optimoi |
 
 ---
 
-## FEATURE 7-10: Muut ominaisuudet 🚀
+## FEATURE 7: Encryption (XOR) 🔒
 
-### FEATURE 7: Encryption
-- XOR-salaus payloadille
-- Tarvitsee implementoinnin
-- Testaus: Lähetä/vastaanota salattua dataa
+**Tarkoitus:** Salaa LoRa-viestit yksinkertaisella XOR-salauksella
 
-### FEATURE 8: Extended Telemetry
-- Lisää uptime, heap, temp payloadiin
-- Tarvitsee implementoinnin
-- Testaus: CSV näyttää lisätiedot
+### config.h -asetukset
 
-### FEATURE 9: Adaptive SF
-- Automaattinen SF-säätö RSSI:n mukaan
-- Tarvitsee implementoinnin
-- Testaus: SF muuttuu etäisyyden mukaan
+```cpp
+#define ENABLE_ENCRYPTION true  // ← Muuta tämä
+#define ENCRYPTION_KEY 0xA5     // Salausk avain (0x00-0xFF)
+```
 
-### FEATURE 10: Packet Statistics
-- Yksityiskohtaiset pakettitilastot
-- Tarvitsee implementoinnin
-- Testaus: Tilastoraportit
+### ⚠️ TÄRKEÄ TURVALLISUUSHUOMIO
+
+**XOR EI OLE kryptografisesti turvallinen!**
+- Sopii vain perus-obfuskaatioon
+- ÄLÄ käytä arkaluonteisiin tietoihin (salasanat, henkilötiedot)
+- Voidaan murtaa helposti taajuusanalyysillä
+- Oikeaan turvallisuuteen: AES-128/256 (ei toteutettu)
+
+### Testausvaiheet
+
+#### Testi 1: Perustoiminta
+1. ✅ Aseta **molemmissa** laitteissa sama avain:
+   ```cpp
+   #define ENABLE_ENCRYPTION true
+   #define ENCRYPTION_KEY 0xA5
+   ```
+2. ✅ Lataa koodi molempiin
+3. ✅ Serial näyttää:
+   ```
+   🔒 Encryption enabled
+     Algorithm: XOR cipher
+     Key: 0xA5
+     ⚠️  WARNING: XOR is NOT cryptographically secure!
+     Use for basic obfuscation only
+     Both devices MUST use same key!
+   ```
+
+#### Testi 2: Salauksen testaus
+1. ✅ Kutsu testiä setup():issa:
+   ```cpp
+   #if ENABLE_ENCRYPTION
+     extern void testEncryption();
+     testEncryption();
+   #endif
+   ```
+2. ✅ Serial näyttää:
+   ```
+   🔒 Testing encryption...
+   Original:  LED:1,TEMP:25.5
+   Hex:       4C 45 44 3A 31 2C 54 45 4D 50 ...
+   Encrypted: E9 E0 E1 9F 94 89 F1 E0 E8 F5 ...
+   Decrypted: LED:1,TEMP:25.5
+   ✓ Encryption test PASSED
+   ```
+
+#### Testi 3: Viestintä salatulla yhteydellä
+1. ✅ Lähetä viestejä normaalisti
+2. ✅ Viestit toimivat (salataan lähettäessä, puretaan vastaanotettaessa)
+3. ✅ **Ilma-aaltojen yli:** Viestit ovat salattuja
+4. ✅ **Serial outputissa:** Näkyy selväkielisenä (purettu)
+
+#### Testi 4: Väärä avain
+1. ✅ Aseta laitteisiin **ERI avaimet:**
+   - Laite 1: `ENCRYPTION_KEY 0xA5`
+   - Laite 2: `ENCRYPTION_KEY 0x5A`
+2. ✅ Viestit eivät parse:oidu oikein
+3. ✅ Serial: Roskapayload
+
+#### Testi 5: Salauksen/purkamisen debug
+1. ✅ Käytä debug-funktioita:
+   ```cpp
+   String encrypted = encryptWithDebug("LED:1");
+   String decrypted = decryptWithDebug(encrypted);
+   ```
+2. ✅ Serial näyttää yksityiskohtaiset hex-dumpit
+
+### Suorituskyky
+
+- Nopeus: <1ms tyypilliselle payloadille
+- Ei havaittavaa viivettä
+- Toimii kaikilla SF-arvoilla
+
+---
+
+## FEATURE 8: Extended Telemetry 📊
+
+**Tarkoitus:** Lisää ylimääräisiä diagnostiikkatietoja payload:iin
+
+### config.h -asetukset
+
+```cpp
+#define ENABLE_EXTENDED_TELEMETRY true  // ← Muuta tämä
+```
+
+### Mitä dataa lisätään?
+
+Payload muuttuu:
+```
+Vanha: SEQ:123,LED:1,TOUCH:0
+Uusi:  SEQ:123,LED:1,TOUCH:0,UP:3600,HEAP:245,MHEAP:238,TEMP:42,LOOP:450
+```
+
+Lisätyt kentät:
+- **UP:** Uptime (seconds)
+- **HEAP:** Free heap (KB)
+- **MHEAP:** Min free heap (KB) - muistivuototunnistus
+- **TEMP:** Sisälämpötila (°C) - tarkkuus ±5°C
+- **LOOP:** Loop-taajuus (Hz) - jos Performance Monitor päällä
+
+### Testausvaiheet
+
+#### Testi 1: Perustoiminta
+1. ✅ Lataa koodi
+2. ✅ Serial näyttää:
+   ```
+   📊 Extended telemetry enabled
+     Monitoring:
+       - System uptime
+       - Free heap memory
+       - Internal temperature
+       - Loop frequency
+     ⚠️  Payload size increased by ~35 bytes
+   ```
+
+#### Testi 2: Payloadin tarkastelu
+1. ✅ Tarkista Serial output
+2. ✅ Pitäisi nähdä lisäkenttiä:
+   ```
+   →RCV: SEQ:45,LED:1,TOUCH:0,UP:125,HEAP:243,MHEAP:238,TEMP:42.5,LOOP:450
+   ```
+
+#### Testi 3: Telemetrian tulostus
+1. ✅ Kutsu raportointia:
+   ```cpp
+   #if ENABLE_EXTENDED_TELEMETRY
+     extern void printTelemetry();
+     printTelemetry();  // 1× minuutissa
+   #endif
+   ```
+2. ✅ Serial näyttää:
+   ```
+   ╔════════ EXTENDED TELEMETRY ════════╗
+   ║ Uptime:          2 min 5 sec
+   ║ Free heap:       243 KB
+   ║ Min heap:        238 KB
+   ║ Temperature:     42.3 °C
+   ║ Loop freq:       450 Hz
+   ║ Updates:         125
+   ╚════════════════════════════════════╝
+   ```
+
+#### Testi 4: Muistivuodon havaitseminen
+1. ✅ Anna pyöriä 30-60 minuuttia
+2. ✅ Tarkista MHEAP:
+   - Vakio → ✅ OK
+   - Laskee jatkuvasti → ⚠️ Memory leak!
+3. ✅ Serial varoitus:
+   ```
+   ║ ⚠️  Memory leak detected!
+   ```
+
+#### Testi 5: Lämpötilaseuranta
+1. ✅ Katso TEMP-arvo
+2. ✅ Normaali: 35-50°C
+3. ✅ Korkea: >80°C → Serial varoitus
+4. ✅ Tarkkuus ±5°C (vain trendeille!)
+
+### Python-skriptien päivitys
+
+Jos käytät PC-loggausta, päivitä parserit:
+```python
+# data_logger.py, lisää kentät:
+cursor.execute('''
+    CREATE TABLE IF NOT EXISTS lora_messages (
+        ...,
+        uptime INTEGER,
+        free_heap INTEGER,
+        min_heap INTEGER,
+        temperature REAL,
+        loop_freq INTEGER
+    )
+''')
+```
+
+---
+
+## FEATURE 9: Adaptive Spreading Factor 📡
+
+**Tarkoitus:** Automaattisesti säädä SF signaalin laadun mukaan
+
+### config.h -asetukset
+
+```cpp
+#define ENABLE_ADAPTIVE_SF true          // ← Muuta tämä
+#define ADAPTIVE_SF_RSSI_GOOD -80        // Laske SF tämän yläpuolella
+#define ADAPTIVE_SF_RSSI_WEAK -105       // Nosta SF tämän alapuolella
+```
+
+### Miten toimii?
+
+1. Seuraa RSSI:tä jatkuvasti
+2. Jos RSSI > -80 dBm → Laske SF (nopeampi siirto)
+3. Jos RSSI < -105 dBm → Nosta SF (parempi kantama)
+4. Odota vakiintumista ennen seuraavaa muutosta
+5. Molemmat laitteet synkronoivat SF:n
+
+### SF-taulukko
+
+| SF | Nopeus | Kantama | Ilma-aika | Herkkyys |
+|----|--------|---------|-----------|----------|
+| 7 | 5.5 kbps | 2 km | 41 ms | -123 dBm |
+| 10 | 1.0 kbps | 5 km | 288 ms | -132 dBm |
+| 12 | 0.3 kbps | 10 km | 991 ms | -137 dBm |
+
+### Testausvaiheet
+
+#### Testi 1: Perustoiminta
+1. ✅ Aseta **molemmissa** laitteissa:
+   ```cpp
+   #define ENABLE_ADAPTIVE_SF true
+   ```
+2. ✅ Lataa molempiin
+3. ✅ Serial näyttää:
+   ```
+   📡 Adaptive Spreading Factor enabled
+     Initial SF: SF12
+     Good RSSI threshold: -80 dBm
+     Weak RSSI threshold: -105 dBm
+     Cooldown: 30 seconds
+     ⚠️  Both devices must have this enabled!
+   ```
+
+#### Testi 2: SF-muutos (hyvä signaali)
+1. ✅ Aloita lähietäisyydeltä (<10m)
+2. ✅ RSSI pitäisi olla > -80 dBm
+3. ✅ 30-60 sekunnin kuluttua Serial:
+   ```
+   ╔════ ADAPTIVE SF ════╗
+   ║ Current SF:  SF12
+   ║ Avg RSSI:    -65.2 dBm
+   ║ Target SF:   SF11
+   ║ Reason:      Strong signal → Faster speed
+   ╚═════════════════════╝
+   📡 Applying SF11...
+   ✓ SF changed to SF11
+   ```
+4. ✅ SF laskee asteittain: SF12 → SF11 → SF10 → ...
+
+#### Testi 3: SF-muutos (heikko signaali)
+1. ✅ Siirrä laitteet kauas toisistaan (100m+)
+2. ✅ RSSI laskee < -105 dBm
+3. ✅ SF nousee: SF7 → SF8 → SF9 → ... → SF12
+4. ✅ Serial:
+   ```
+   ╔════ ADAPTIVE SF ════╗
+   ║ Current SF:  SF7
+   ║ Avg RSSI:    -110.5 dBm
+   ║ Target SF:   SF8
+   ║ Reason:      Weak signal → Better range
+   ╚═════════════════════╝
+   ```
+
+#### Testi 4: SF-synkronointi
+1. ✅ Tarkista että molemmat laitteet käyttävät samaa SF:ää
+2. ✅ Vastaanottaja Serial:
+   ```
+   📡 Remote requests SF change to SF10
+   ✓ SF changed to SF10
+   → Sending ACK: CMD:SF_ACK:10
+   ```
+
+#### Testi 5: SF-tilanne
+1. ✅ Tulosta status:
+   ```cpp
+   extern void printAdaptiveSFStatus();
+   printAdaptiveSFStatus();
+   ```
+2. ✅ Serial:
+   ```
+   ╔═══════ ADAPTIVE SF STATUS ═══════╗
+   ║ Current SF:      SF10
+   ║ Avg RSSI:        -92.3 dBm
+   ║ Changes:         5
+   ║ Time since last: 45 s
+   ║ Samples:         10 / 10
+   ║ Status:          ✓ STABLE
+   ╚══════════════════════════════════╝
+   ```
+
+#### Testi 6: Pakota SF (debugging)
+1. ✅ Pakota SF:
+   ```cpp
+   forceSpreadingFactor(8);  // Pakota SF8
+   ```
+2. ✅ Ohittaa adaptiivisen logiikan
+
+### Ongelmat
+
+| Ongelma | Syy | Ratkaisu |
+|---------|-----|----------|
+| Jatkuvat SF-muutokset | Epävakaa RSSI | Kasvata cooldown-aikaa |
+| Ei synkronoi | Vain toisessa päällä | Molemmat ENABLE_ADAPTIVE_SF true |
+| Packet loss | SF-transition | Normaalia, menee ohi |
+
+---
+
+## FEATURE 10: Packet Statistics 📈
+
+**Tarkoitus:** Yksityiskohtaiset tilastot pakettiliikenteestä
+
+### config.h -asetukset
+
+```cpp
+#define ENABLE_PACKET_STATS true        // ← Muuta tämä
+#define PACKET_STATS_INTERVAL 30000     // 30 sekuntia
+```
+
+### Mitä seurataan?
+
+- Vastaanotetut/menetetyt paketit
+- Duplikaatit ja järjestyksestä poikkeavat
+- RSSI/SNR min/max/avg
+- Pakettien väli ja jitter
+- Häviöputket (loss streaks)
+- Recovery-onnistumisprosentti
+
+### Testausvaiheet
+
+#### Testi 1: Perustoiminta
+1. ✅ Lataa koodi
+2. ✅ Serial näyttää:
+   ```
+   📈 Packet statistics enabled
+     Report interval: 30 seconds
+     Tracking:
+       - Duplicates, out-of-order packets
+       - RSSI/SNR min/max/avg
+       - Packet timing and jitter
+       - Loss streaks and recovery
+   ```
+
+#### Testi 2: Ensimmäinen raportti (30s)
+1. ✅ Odota 30 sekuntia
+2. ✅ Serial näyttää:
+   ```
+   ╔═══════════════ PACKET STATISTICS ═══════════════╗
+   ║ Report #1
+   ║
+   ║ RECEPTION:
+   ║   Packets received:    145
+   ║   Packets lost:        3 (2.03%)
+   ║   Duplicates:          0
+   ║   Out-of-order:        1
+   ║
+   ║ RSSI (dBm):
+   ║   Average:             -85.3
+   ║   Min:                 -95
+   ║   Max:                 -78
+   ║   Range:               17
+   ║
+   ║ SNR (dB):
+   ║   Average:             7.2
+   ║   Min:                 4
+   ║   Max:                 10
+   ║
+   ║ TIMING:
+   ║   Avg interval:        2050 ms
+   ║   Min interval:        1985 ms
+   ║   Max interval:        2150 ms
+   ║   Jitter:              25.3 ms
+   ║
+   ║ LOSS STREAKS:
+   ║   Current streak:      0
+   ║   Max streak:          2
+   ║   Total streaks:       2
+   ╚════════════════════════════════════════════════╝
+   ```
+
+#### Testi 3: Duplikaattien havaitseminen
+1. ✅ Jos duplikaatteja:
+   ```
+   📋 Duplicate packet: SEQ:42
+   ║   Duplicates:          1
+   ```
+
+#### Testi 4: Järjestyksestä poikkeavat
+1. ✅ Jos OOO-paketteja:
+   ```
+   🔀 Out-of-order packet: Expected SEQ:50, Got:52
+   ║   Out-of-order:        1
+   ```
+
+#### Testi 5: Loss streaks
+1. ✅ Simuloi häviö: sammuta sender 10 sekunniksi
+2. ✅ Receiver:
+   ```
+   ║   Current streak:      5
+   ║   Max streak:          5
+   ```
+3. ✅ Käynnistä sender uudelleen → streak nollautuu
+
+#### Testi 6: Nollaa tilastot
+1. ✅ Nollaa:
+   ```cpp
+   extern void resetPacketStats();
+   resetPacketStats();
+   ```
+2. ✅ Serial:
+   ```
+   🔄 Resetting packet statistics...
+   ✓ Statistics reset
+   ```
+
+### CSV-output
+
+Lisää CSV:hen yksityiskohtaiset tilastot:
+```
+...,RX:145,LOST:3,LOSS%:2.03,RSSI_AVG:-85.3,JITTER:25.3
+```
 
 ---
 
 ## 📋 Yhteenveto: Testausmatriisi
 
-| Feature | Status | Laitteisto tarvitaan? | Testausaika | Prioriteetti |
-|---------|--------|------------------------|-------------|--------------|
+| Feature | Status | Laitteisto? | Testausaika | Prioriteetti |
+|---------|--------|-------------|-------------|--------------|
 | #1 Battery Monitor | ✅ Valmis | Kyllä (voltage divider) | 15 min | ⭐⭐⭐ Korkea |
 | #2 Runtime Config | ✅ Valmis | Ei | 10 min | ⭐⭐⭐ Korkea |
 | #3 WiFi AP | 🔲 Ei toteutettu | Ei | - | ⭐⭐ Keskitaso |
 | #4 Advanced Commands | ✅ Valmis | Kyllä (2 laitetta) | 20 min | ⭐⭐⭐ Korkea |
 | #5 Performance Monitor | ✅ Valmis | Ei | 5 min | ⭐⭐ Keskitaso |
-| #6 Watchdog | 🔲 Ei toteutettu | Ei | - | ⭐ Matala |
-| #7 Encryption | 🔲 Ei toteutettu | Kyllä (2 laitetta) | - | ⭐ Matala |
-| #8 Extended Telemetry | 🔲 Ei toteutettu | Ei | - | ⭐ Matala |
-| #9 Adaptive SF | 🔲 Ei toteutettu | Kyllä | - | ⭐⭐ Keskitaso |
-| #10 Packet Stats | 🔲 Ei toteutettu | Ei | - | ⭐ Matala |
+| #6 Watchdog Timer | ✅ **UUSI!** | Ei | 10 min | ⭐⭐ Keskitaso |
+| #7 Encryption (XOR) | ✅ **UUSI!** | Kyllä (2 laitetta) | 15 min | ⭐⭐ Keskitaso |
+| #8 Extended Telemetry | ✅ **UUSI!** | Ei | 10 min | ⭐⭐⭐ Korkea |
+| #9 Adaptive SF | ✅ **UUSI!** | Kyllä (2 laitetta) | 25 min | ⭐⭐⭐ Korkea |
+| #10 Packet Statistics | ✅ **UUSI!** | Ei | 10 min | ⭐⭐ Keskitaso |
+
+**Yhteensä:** 9 valmista ominaisuutta, 1 tulossa (#3 WiFi AP)
 
 ---
 
 ## 🎯 Testausjärjestys (suositus)
 
-**Ilman lisälaitteistoa (testaa ensin):**
+**VAIHE 1: Ilman lisälaitteistoa (testaa ensin - 40 min):**
+
 1. ✅ **Feature #5: Performance Monitor** (5 min)
    - Helpoin, ei vaadi mitään lisää
    - Katsotaan että järjestelmä toimii
@@ -576,20 +1036,84 @@ Tämä ominaisuus on valmisteltu, mutta vaatii:
    - Serial-komennot
    - Testaa että voit muuttaa asetuksia
 
-**Yhden laitteen kanssa:**
-3. ✅ **Feature #1: Battery Monitor** (15 min)
-   - Tarvitsee 2× 10kΩ vastukset
-   - Tarvitsee akun/jännitelähteen
+3. ✅ **Feature #6: Watchdog Timer** (10 min) 🆕
+   - Turvallisuusominaisuus
+   - Testaa jumittumissuojaus
 
-**Kahden laitteen kanssa:**
-4. ✅ **Feature #4: Advanced Commands** (20 min)
+4. ✅ **Feature #8: Extended Telemetry** (10 min) 🆕
+   - Lisää dataa payloadiin
+   - Muistivuototarkkailu
+
+5. ✅ **Feature #10: Packet Statistics** (10 min) 🆕
+   - Yksityiskohtaiset tilastot
+   - Debuggaustyökalu
+
+**VAIHE 2: Yhden laitteen kanssa (15 min):**
+
+6. ✅ **Feature #1: Battery Monitor** (15 min)
+   - Tarvitsee: 2× 10kΩ vastukset + akku
+   - Mittaa akkujännite
+
+**VAIHE 3: Kahden laitteen kanssa (80 min):**
+
+7. ✅ **Feature #4: Advanced Commands** (20 min)
    - Molemmissa laittissa sama koodi
    - Testaa etäkomennot
 
-**Myöhemmin (kun toteutettu):**
-- Feature #3: WiFi AP
-- Feature #6: Watchdog
-- Feature #7-10: Muut
+8. ✅ **Feature #7: Encryption** (15 min) 🆕
+   - Molemmissa sama avain
+   - Salattu viestintä
+
+9. ✅ **Feature #9: Adaptive SF** (25 min) 🆕
+   - Molemmat laitteet synkronoivat
+   - Testaa lähellä ja kaukana
+   - Vaativain feature!
+
+**VAIHE 4: Myöhemmin:**
+
+- ⏳ Feature #3: WiFi AP (ei vielä toteutettu)
+
+---
+
+## 📊 Ominaisuuksien yhteensopivuus
+
+**Voiko käyttää yhtä aikaa?**
+
+| Feature | Yhteensopiva kaikkien kanssa? | Huomiot |
+|---------|--------------------------------|---------|
+| Battery Monitor | ✅ Kyllä | Ei riippuvuuksia |
+| Runtime Config | ✅ Kyllä | Voi muuttaa muita asetuksia |
+| Advanced Commands | ✅ Kyllä | Vaatii bi-directional |
+| Performance Monitor | ✅ Kyllä | Suositeltu aina päälle |
+| Watchdog Timer | ✅ Kyllä | Turvallisuusominaisuus |
+| Encryption | ✅ Kyllä | Molemmat laitteet sama avain |
+| Extended Telemetry | ⚠️ Payload kasvaa | Voi vaikuttaa kantamaan |
+| Adaptive SF | ⚠️ Monimutkainen | Testaa ensin erikseen |
+| Packet Statistics | ✅ Kyllä | Vähän muistia (~100 bytes) |
+
+**Suositellut yhdistelmät:**
+
+**Perus (tuotanto):**
+- Performance Monitor
+- Watchdog Timer
+- Packet Statistics
+
+**Kattava seuranta:**
+- Performance Monitor
+- Extended Telemetry
+- Battery Monitor
+- Packet Statistics
+
+**Turvallisuus + diagnostiikka:**
+- Watchdog Timer
+- Advanced Commands
+- Encryption
+- Extended Telemetry
+
+**Maksimisuorituskyky:**
+- Adaptive SF
+- Extended Telemetry
+- Packet Statistics
 
 ---
 
