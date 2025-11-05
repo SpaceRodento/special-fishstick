@@ -43,7 +43,8 @@
 
   Alternative: Simple Phototransistor + Red Filter
   - Cheaper (~1-2€)
-  - Analog output → GPIO 35
+  - Analog output → GPIO 36 (ADC1_CH0) or GPIO 39 (ADC1_CH3)
+  - Note: GPIO 35 already used by battery monitor
   - Less accurate, no color discrimination
   - Good enough for basic detection
 
@@ -110,12 +111,17 @@
 
 // Light detection configuration
 #define LIGHT_UPDATE_INTERVAL 100       // Update every 100ms (10 Hz)
-#define RED_THRESHOLD 100               // Minimum red value for detection
+#ifndef RED_THRESHOLD
+  #define RED_THRESHOLD 100             // Minimum red value for detection (default)
+#endif
 #define RED_RATIO_THRESHOLD 2.0         // R must be 2× larger than G and B
 #define FLASH_MIN_INTERVAL 300          // Min time between flashes (ms)
 #define FLASH_MAX_INTERVAL 2000         // Max time between flashes (ms)
 #define FLASH_CONFIRM_COUNT 2           // Flashes needed to confirm alarm
 #define LIGHT_COOLDOWN 5000             // Cooldown between alerts (5s)
+
+// Runtime threshold (can be changed without recompiling)
+int redThreshold = RED_THRESHOLD;
 
 // Light detection state
 struct LightDetector {
@@ -168,7 +174,7 @@ void initLightDetector() {
     Serial.println("  Sensor: TCS34725 RGB Color Sensor");
     Serial.println("  I2C: SDA=GPIO21, SCL=GPIO22");
     Serial.print("  Red threshold: ");
-    Serial.println(RED_THRESHOLD);
+    Serial.println(redThreshold);
     Serial.print("  Ratio threshold: ");
     Serial.println(RED_RATIO_THRESHOLD);
     Serial.println("  🚨 Smoke alarm LED monitoring active");
@@ -202,14 +208,14 @@ void updateLightReadings(uint16_t r, uint16_t g, uint16_t b, uint16_t c) {
 bool isRedDominant() {
   #if ENABLE_LIGHT_DETECTION
     // Red must be above threshold
-    if (light.red < RED_THRESHOLD) {
+    if (light.red < redThreshold) {
       return false;
     }
 
     // Red must be significantly higher than green and blue
     // Avoid division by zero
     if (light.green == 0 || light.blue == 0) {
-      return (light.red > RED_THRESHOLD);
+      return (light.red > redThreshold);
     }
 
     float redGreenRatio = (float)light.red / (float)light.green;
@@ -351,7 +357,9 @@ void calibrateLightBaseline() {
     Serial.print("✓ Ambient red level: ");
     Serial.println(light.ambientRed);
     Serial.print("  Recommended threshold: ");
-    Serial.println(light.ambientRed + 50);
+    // Use 2× ambient or minimum 100, whichever is higher
+    int recommendedThreshold = max((int)(light.ambientRed * 2), 100);
+    Serial.println(recommendedThreshold);
   #endif
 }
 
@@ -498,6 +506,20 @@ void getLightRGB(uint16_t* r, uint16_t* g, uint16_t* b) {
     *r = 0;
     *g = 0;
     *b = 0;
+  #endif
+}
+
+// Manual red threshold adjustment (runtime only, not persisted)
+void setRedThreshold(int threshold) {
+  #if ENABLE_LIGHT_DETECTION
+    int oldThreshold = redThreshold;
+    redThreshold = threshold;
+
+    Serial.print("💡 Red threshold changed: ");
+    Serial.print(oldThreshold);
+    Serial.print(" → ");
+    Serial.println(redThreshold);
+    Serial.println("  Note: Runtime only, not saved to config.h");
   #endif
 }
 

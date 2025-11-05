@@ -83,15 +83,30 @@
 #include <Arduino.h>
 #include "config.h"
 
-// Audio detection configuration
-#define AUDIO_PIN 34                    // ADC1_CH6 (analog audio input)
+// Audio detection configuration (using values from config.h if available)
+#ifndef AUDIO_PIN
+  #define AUDIO_PIN 34                  // ADC1_CH6 (analog audio input)
+#endif
 #define AUDIO_SAMPLE_WINDOW 50          // Sample window in milliseconds
-#define AUDIO_SAMPLES 50                // Number of samples per window
-#define AUDIO_THRESHOLD 200             // RMS threshold for alarm detection
+#ifndef AUDIO_SAMPLES
+  #define AUDIO_SAMPLES 50              // Number of samples per window
+#endif
+#ifndef AUDIO_THRESHOLD
+  #define AUDIO_THRESHOLD 200           // RMS threshold for alarm detection (default)
+#endif
 #define AUDIO_SUSTAINED_MS 1000         // Alarm must be sustained (1 second)
-#define AUDIO_PEAK_MIN 3                // Minimum peaks to confirm alarm
-#define AUDIO_PEAK_MAX 6                // Maximum peaks per second (alarm pattern)
-#define AUDIO_COOLDOWN 5000             // Cooldown between alerts (5 seconds)
+#ifndef AUDIO_PEAK_MIN
+  #define AUDIO_PEAK_MIN 3              // Minimum peaks to confirm alarm
+#endif
+#ifndef AUDIO_PEAK_MAX
+  #define AUDIO_PEAK_MAX 6              // Maximum peaks per second (alarm pattern)
+#endif
+#ifndef AUDIO_COOLDOWN
+  #define AUDIO_COOLDOWN 5000           // Cooldown between alerts (5 seconds)
+#endif
+
+// Runtime threshold (can be changed without recompiling)
+int audioThreshold = AUDIO_THRESHOLD;
 
 // Audio detection state
 struct AudioDetector {
@@ -125,7 +140,7 @@ void initAudioDetector() {
     pinMode(AUDIO_PIN, INPUT);
 
     // Configure ADC
-    analogSetAttenuation(ADC_11db);    // 0-3.3V range
+    analogSetAttenuation(ADC_11dB);    // 0-3.3V range (corrected: 11dB not 11db)
     analogReadResolution(12);          // 12-bit (0-4095)
 
     audio.lastUpdate = millis();
@@ -134,7 +149,7 @@ void initAudioDetector() {
     Serial.print("  Pin: GPIO ");
     Serial.println(AUDIO_PIN);
     Serial.print("  Threshold: ");
-    Serial.println(AUDIO_THRESHOLD);
+    Serial.println(audioThreshold);
     Serial.print("  Sample rate: ");
     Serial.print(1000 / AUDIO_SAMPLE_WINDOW);
     Serial.println(" Hz");
@@ -159,7 +174,8 @@ int calculateRMS() {
       // Square
       sum += (unsigned long)(amplitude * amplitude);
 
-      delayMicroseconds(1000 / samples);  // Spread samples over window
+      // Spread samples over window: 50ms / 50 samples = 1000µs per sample
+      delayMicroseconds((AUDIO_SAMPLE_WINDOW * 1000) / samples);
     }
 
     // Mean and square root
@@ -211,7 +227,7 @@ bool detectPeak(int rms) {
     unsigned long now = millis();
 
     // Check if this is a peak (above threshold)
-    if (rms > AUDIO_THRESHOLD) {
+    if (rms > audioThreshold) {
       // Prevent multiple detections of same peak (debounce)
       if (now - audio.lastPeakTime > 100) {  // 100ms debounce
         audio.peakCount++;
@@ -260,7 +276,7 @@ void updateAudioDetection() {
     bool peakDetected = detectPeak(audio.currentRMS);
 
     // Check for alarm
-    bool highVolume = (audio.currentRMS > AUDIO_THRESHOLD);
+    bool highVolume = (audio.currentRMS > audioThreshold);
 
     if (highVolume && !audio.alarmDetected) {
       // Potential alarm start
@@ -340,7 +356,7 @@ void printAudioStatus() {
     Serial.print("║ Max RMS:        ");
     Serial.println(audio.maxRMS);
     Serial.print("║ Threshold:      ");
-    Serial.println(AUDIO_THRESHOLD);
+    Serial.println(audioThreshold);
     Serial.print("║ Alarm active:   ");
     Serial.println(audio.alarmDetected ? "🚨 YES!" : "No");
     Serial.print("║ Peaks/sec:      ");
@@ -383,16 +399,17 @@ bool isFireAlarmActive() {
   #endif
 }
 
-// Manual threshold adjustment
+// Manual threshold adjustment (runtime only, not persisted)
 void setAudioThreshold(int threshold) {
   #if ENABLE_AUDIO_DETECTION
-    Serial.print("🔊 Audio threshold changed: ");
-    Serial.print(AUDIO_THRESHOLD);
-    Serial.print(" → ");
-    Serial.println(threshold);
+    int oldThreshold = audioThreshold;
+    audioThreshold = threshold;
 
-    // Note: This changes runtime value, not config.h define
-    // To persist, update AUDIO_THRESHOLD in config.h
+    Serial.print("🔊 Audio threshold changed: ");
+    Serial.print(oldThreshold);
+    Serial.print(" → ");
+    Serial.println(audioThreshold);
+    Serial.println("  Note: Runtime only, not saved to config.h");
   #endif
 }
 
@@ -411,7 +428,7 @@ void testAudioDetector() {
       Serial.print("  Peaks: ");
       Serial.print(audio.peakCount);
 
-      if (audio.currentRMS > AUDIO_THRESHOLD) {
+      if (audio.currentRMS > audioThreshold) {
         Serial.print("  🔊 LOUD!");
       }
 
