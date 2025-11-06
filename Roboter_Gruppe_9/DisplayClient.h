@@ -49,7 +49,7 @@ public:
     txPin = tx_pin;
     rxPin = rx_pin;
     baudrate = baud;
-    serial = &Serial1;  // Use UART1
+    serial = &Serial2;  // Use UART2 (UART1 is used by LoRa!)
     firstField = true;
   }
 
@@ -57,11 +57,15 @@ public:
    * Initialize serial connection to display
    */
   void begin() {
+    // Ensure TX pin is set to OUTPUT mode
+    pinMode(txPin, OUTPUT);
+
     if (rxPin == -1) {
       // TX only mode (most common)
       serial->begin(baudrate, SERIAL_8N1, -1, txPin);
     } else {
       // Full duplex mode
+      pinMode(rxPin, INPUT);
       serial->begin(baudrate, SERIAL_8N1, rxPin, txPin);
     }
 
