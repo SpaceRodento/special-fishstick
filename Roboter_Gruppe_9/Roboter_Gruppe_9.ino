@@ -699,6 +699,9 @@ void loop() {
       printHealthReport(health, remote);
     }
 
+    // Send update to display station (if enabled)
+    sendDisplayUpdate();
+
   } else {
     // SENDER: Send every 2 seconds
     if (millis() - timing.lastSend >= 2000) {

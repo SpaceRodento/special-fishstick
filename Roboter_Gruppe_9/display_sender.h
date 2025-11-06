@@ -122,6 +122,9 @@ void sendDisplayUpdate() {
 
     lastDisplayUpdate = now;
 
+    // Debug output
+    Serial.print("📤 Sending display update... ");
+
     // Start building message
     display.clear();
 
@@ -181,6 +184,7 @@ void sendDisplayUpdate() {
 
     // Send all data
     display.send();
+    Serial.println("✓ Sent!");
 
     // Check for fire alerts
     #if ENABLE_AUDIO_DETECTION
