@@ -1,291 +1,382 @@
-# Roboter Display TFT - LoRa Display Station
+# Roboter Gruppe 9 - Display Station
 
-**Erillinen TFT-näyttölaite** ESP32-2432S022:lle joka näyttää reaaliaikaista dataa pää-ESP32:lta LoRa-verkon yli.
+**UART-pohjainen näyttölaite** ESP32-2432S022:lle (Landscape-tila).
+
+Yksinkertainen, joustava ja helposti integroitavissa mihin tahansa ESP32-projektiin!
+
+---
+
+## 🎯 Ominaisuudet
+
+✅ **Ei LoRa-riippuvuuksia** - Vain Serial-yhteys!
+✅ **2 johtoa** - TX→RX ja GND→GND
+✅ **Landscape-näyttö** - 320x240 vaakataso
+✅ **Helppokäyttöinen API** - `display.set("LED", "ON")`
+✅ **Automaattinen päivitys** - Näyttö päivittyy välittömästi
+✅ **Joustava protokolla** - CSV-muotoinen data
+✅ **Useita esimerkkejä** - Copy-paste valmis!
+✅ **Värikoodattu UI** - Vihreä/Oranssi/Punainen
 
 ---
 
 ## 📦 Laitteisto
 
-**ESP32-2432S022:**
+**Display-laite (ESP32-2432S022):**
 - ESP32-WROOM-32
 - 2.4" ST7789 TFT (240x320 pikseliä)
 - 8-bit parallel interface
-- CST820 kosketusnäyttö (I2C) - ei käytössä tässä projektissa
-- USB-C virtalähde
+- Integroitu - ei vaadi kytkentöjä!
 
-**RYLR896 LoRa-moduuli:**
-- 868 MHz LoRa transceiver
-- UART-käyttöliittymä
+**Pää-ESP32:**
+- Mikä tahansa ESP32 (ESP32, ESP32-S2, ESP32-C3, jne.)
+- 1× vapaa GPIO (TX)
 
 ---
 
-## 🔌 Kytkennät
+## 🔌 Kytkentä
 
-### LoRa-moduuli → ESP32-2432S022
+### VAIN 2 JOHTOA!
 
 ```
-RYLR896         ESP32-2432S022
-────────────────────────────────
-VCC       →     3.3V
-GND       →     GND
-TX        →     GPIO 18 (RX1)
-RX        →     GPIO 26 (TX1)
+┌─────────────────┐           ┌──────────────────┐
+│   Pää-ESP32     │           │  Display-ESP32   │
+│                 │           │  (2432S022)      │
+│                 │           │                  │
+│  GPIO 17 (TX) ──┼──────────►│─ GPIO 18 (RX)   │
+│  GND          ──┼───────────│─ GND             │
+│                 │           │                  │
+└─────────────────┘           └──────────────────┘
 ```
 
-### TFT-näyttö (jo valmiiksi kytketty)
-
-Näyttö on integroitu ESP32-2432S022 board:iin - ei tarvitse kytkentöjä!
+**Huom:** GPIO 17 voi olla mikä tahansa vapaa GPIO päälaitteessa!
 
 ---
 
-## 📚 Kirjastot
+## 🚀 Pikaohje (5 minuuttia käyttöön!)
 
-### Arduino IDE:
+### Vaihe 1: Lataa display-laite
 
-1. **LovyanGFX** (TFT-grafiikka)
-   ```
-   Tools → Manage Libraries
-   Etsi: "LovyanGFX"
-   Asenna: "LovyanGFX" by lovyan03
-   ```
+```bash
+# Arduino IDE
+File → Open → Roboter_Display_TFT/Roboter_Display_TFT.ino
+Tools → Board → ESP32 Dev Module
+Tools → Port → (valitse ESP32-2432S022)
+Tools → Upload
+```
 
-2. **ESP32 Board Support:**
-   ```
-   File → Preferences → Additional Boards Manager URLs:
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+### Vaihe 2: Kopioi kirjasto päälaitteeseen
 
-   Tools → Board → Boards Manager
-   Etsi: "esp32"
-   Asenna: "esp32" by Espressif Systems
-   ```
+Kopioi `DisplayClient.h` oman projektisi kansioon:
+```
+MinunProjekti/
+├── MinunProjekti.ino
+└── DisplayClient.h       ← Kopioi tämä!
+```
 
-### Vaihtoehtoinen tapa:
-
-Käytä mukana tullutta `Libraries/LovyanGFX-master` kansiota:
-1. Kopioi kansio: `Example_For_2in_Screen/Libraries/LovyanGFX-master`
-2. Arduino Libraries -kansioon: `~/Documents/Arduino/libraries/`
-
----
-
-## ⚙️ Konfigurointi
-
-### 1. LoRa-osoitteet
-
-Päälaitteen ja näyttölaitteen LoRa-osoitteet:
-
-| Laite | Osoite | Rooli |
-|-------|--------|-------|
-| Pää-ESP32 (sender) | 2 | Lähettää dataa |
-| Display-ESP32 | 3 | Vastaanottaa ja näyttää |
-| Receiver-ESP32 | 1 | Vastaanottaa |
-
-**Tärkeää:** Network ID:n pitää olla sama (6) kaikissa laitteissa!
-
-### 2. Pää-ESP32 muutokset
-
-Lisää `Roboter_Gruppe_9.ino`:hon funktio joka lähettää dataa displaylle:
+### Vaihe 3: Lisää koodiin
 
 ```cpp
-void sendDisplayUpdate() {
-  String payload = "SEQ:" + String(sequence) +
-                   ",LED:" + String(digitalRead(LED_PIN)) +
-                   ",TOUCH:" + String(touchDetected ? 1 : 0);
+#include "DisplayClient.h"
 
-  // Jos extended telemetry käytössä:
-  #if ENABLE_EXTENDED_TELEMETRY
-    payload += ",UP:" + String(millis() / 1000);
-    payload += ",HEAP:" + String(ESP.getFreeHeap() / 1024);
-    // jne...
-  #endif
+DisplayClient display(17);  // TX pin 17
 
-  // Lähetä displaylle (address 3)
-  sendLoRaMessage(payload, 3);
-}
-```
-
-Kutsu `sendDisplayUpdate()` esim. 2 sekunnin välein.
-
-### 3. Näytön kirkkaus
-
-Säädä `Roboter_Display_TFT.ino`:ssa:
-
-```cpp
-#define BACKLIGHT_BRIGHTNESS 200  // 0-255 (0 = pimeä, 255 = kirkkain)
-```
-
----
-
-## 🖥️ Näytön Layout
-
-```
-╔════════════════════════════════╗
-║       ROBOTER 9                ║ ← Header (sininen)
-║       CONNECTED    2h15m       ║
-╠════════════════════════════════╣
-║ STATUS:                        ║
-║   Seq: 1234                    ║
-║   LED: ON                      ║
-║   Touch: NO                    ║
-║   RSSI: -78 dBm                ║
-║   Battery: 3.85V (85%)         ║
-╠════════════════════════════════╣
-║ TELEMETRY:                     ║
-║   Uptime: 2h15m                ║
-║   Heap: 245 KB                 ║
-║   Temp: 42 C                   ║
-║   Loop: 450 Hz                 ║
-╠════════════════════════════════╣
-║ ALERTS:                        ║
-║   No alerts                    ║ ← Muuttuu punaiseksi jos hälytys!
-╠════════════════════════════════╣
-║ Packets: 1234                  ║ ← Footer
-╚════════════════════════════════╝
-```
-
----
-
-## 🚀 Käyttö
-
-### 1. Lataa koodi ESP32-2432S022:een
-
-Arduino IDE:
-```
-Tools → Board → ESP32 Arduino → ESP32 Dev Module
-Tools → Upload Speed → 115200
-Tools → Port → (valitse oikea portti)
-Sketch → Upload
-```
-
-### 2. Avaa Serial Monitor
-
-```
-Tools → Serial Monitor
-Baud rate: 115200
-```
-
-Pitäisi näkyä:
-```
-╔════════════════════════════════════════╗
-║  ROBOTER GRUPPE 9 - DISPLAY STATION   ║
-║  ESP32-2432S022 + LoRa Display        ║
-╚════════════════════════════════════════╝
-
-📺 Initializing TFT display...
-📡 Initializing LoRa...
-  Configuring RYLR896...
-  +OK
-✓ LoRa initialized
-  Address: 3
-  Network ID: 6
-✓ Display station ready!
-
-Waiting for LoRa data...
-```
-
-### 3. Käynnistä pää-ESP32
-
-Kun pää-ESP32 alkaa lähettää, näytössä näkyy:
-```
-📡 RX: SEQ:1,LED:1,TOUCH:0 [RSSI:-78 SNR:10]
-📡 RX: SEQ:2,LED:0,TOUCH:0 [RSSI:-79 SNR:10]
-...
-```
-
-TFT-näyttö päivittyy automaattisesti!
-
----
-
-## 🐛 Vianetsintä
-
-### Näyttö ei käynnisty
-- Tarkista USB-C virtalähde (tarvitaan vähintään 500mA)
-- Tarkista että kirjastot on asennettu oikein
-- Tarkista board-valinta (ESP32 Dev Module)
-
-### LoRa ei yhdistä
-- Tarkista kytkennät (TX ↔ RX ristiin!)
-- Tarkista osoitteet (Display = 3, Sender = 2)
-- Tarkista Network ID (6 molemmissa)
-- Tarkista LoRa-moduulin virtalähde (3.3V!)
-
-### Näyttö on liian kirkas/tumma
-- Säädä `BACKLIGHT_BRIGHTNESS` (0-255)
-
-### "NO SIGNAL" näkyy näytössä
-- Pää-ESP32 ei lähetä
-- Väärät LoRa-osoitteet
-- LoRa-moduuli ei vastaa (tarkista kytkennät)
-
-### Näyttö päivittyy hitaasti
-- Normaalia! Päivitysväli on 500ms
-- Voit muuttaa: `#define DISPLAY_UPDATE_INTERVAL 500`
-
----
-
-## 📊 Datan Formaatti
-
-Pää-ESP32 lähettää CSV-muotoista dataa:
-
-**Perus payload:**
-```
-SEQ:123,LED:1,TOUCH:0
-```
-
-**Extended telemetry:**
-```
-SEQ:123,LED:1,TOUCH:0,UP:3600,HEAP:245,TEMP:42,LOOP:450
-```
-
-**Akku:**
-```
-SEQ:123,LED:1,TOUCH:0,BAT:3.85
-```
-
-**Hälytykset:**
-```
-ALERT:FIRE_AUDIO,RMS:450,PEAKS:3
-ALERT:FIRE_LIGHT,RED:255,FLASHES:5
-```
-
-Display parsii automaattisesti kaikki kentät!
-
----
-
-## ✅ Testaus
-
-### 1. Testaa TFT ilman LoRaa
-
-Kommentoi pois LoRa-initialisointi ja aseta test-dataa:
-```cpp
 void setup() {
-  // ...
-  // initLoRa();  // Kommentoi pois
+  Serial.begin(115200);
+  display.begin();  // ← Lisää tämä
+}
 
-  // Test data
-  displayData.sequence = 1234;
-  displayData.ledState = true;
-  displayData.rssi = -78;
-  displayData.batteryVoltage = 3.85;
-  displayData.loraConnected = true;
+void loop() {
+  display.set("LED", "ON");
+  display.set("Temp", 42);
+  display.send();
+
+  delay(1000);
 }
 ```
 
-### 2. Testaa LoRa ilman pää-ESP:tä
+### Vaihe 4: Lataa ja testaa!
 
-Lähetä manuaalisesti Serial Monitorista pää-ESP:ltä:
-```
-AT+SEND=3,15,SEQ:1,LED:1
-```
-
-Displayn pitäisi vastaanottaa viesti!
+Kytke johdot, lataa koodi, ja näyttö alkaa päivittyä! 🎉
 
 ---
 
-## 🔧 Customointi
+## 📖 API-dokumentaatio
+
+### Perustoiminnot
+
+```cpp
+DisplayClient display(17);  // Luo client (TX pin)
+
+display.begin();            // Alusta yhteys
+
+display.set("key", "value"); // Lisää kenttä
+display.send();              // Lähetä kaikki
+
+display.update("key", 42);   // Päivitä yksi kenttä heti
+
+display.alert("Fire!");      // Näytä hälytys
+display.clearAlert();        // Poista hälytys
+
+display.clearDisplay();      // Tyhjennä kaikki
+```
+
+### Esimerkkejä
+
+#### Esimerkki 1: Yksinkertaisin
+
+```cpp
+void loop() {
+  display.update("Counter", counter++);
+  delay(1000);
+}
+```
+
+#### Esimerkki 2: Useampi kenttä
+
+```cpp
+void loop() {
+  display.clear();
+  display.set("Temp", 22.5);
+  display.set("Humidity", 65);
+  display.set("Status", "OK");
+  display.send();
+
+  delay(2000);
+}
+```
+
+#### Esimerkki 3: Hälytys
+
+```cpp
+if (temperature > 30.0) {
+  display.alert("High temperature!");
+} else {
+  display.clearAlert();
+}
+```
+
+#### Esimerkki 4: Monipuolinen
+
+```cpp
+display.clear();
+display.set("LED", digitalRead(LED_PIN) ? "ON" : "OFF");
+display.set("Temp", String(temp, 1) + "C");
+display.set("RSSI", String(rssi) + " dBm");
+display.set("Uptime", String(millis()/1000) + "s");
+display.send();
+```
+
+---
+
+## 🔧 Konfigurointi
+
+### Vaihda TX pin
+
+```cpp
+DisplayClient display(25);  // Käytä GPIO 25
+```
+
+### Vaihda baudrate
+
+```cpp
+DisplayClient display(17, -1, 9600);  // 9600 baud
+```
+
+### Full-duplex (TX + RX)
+
+```cpp
+DisplayClient display(17, 16);  // TX=17, RX=16
+```
+
+### Vaihda näytön kirkkautta
+
+Display-laitteessa (`Universal_Display_TFT.ino`):
+```cpp
+#define BACKLIGHT_BRIGHTNESS 200  // 0-255
+```
+
+---
+
+## 📊 Protokolla
+
+### Formaatti
+
+CSV-muotoinen data:
+```
+KEY:VALUE,KEY2:VALUE2,KEY3:VALUE3,...
+```
+
+### Esimerkkejä
+
+```
+LED:ON,Temp:22.5,Status:OK
+SEQ:123,LED:1,TOUCH:0,RSSI:-78
+Counter:42,Voltage:3.85,Heap:245
+```
+
+### Erikoiskomennot
+
+| Komento | Kuvaus | Esimerkki |
+|---------|--------|-----------|
+| `ALERT:message` | Näytä hälytys | `ALERT:Fire detected!` |
+| `CLEAR_ALERT` | Poista hälytys | `CLEAR_ALERT` |
+| `CLEAR` | Tyhjennä kaikki | `CLEAR` |
+
+### Rajoitukset
+
+- Maksimi 20 kenttää
+- Maksimi 256 merkkiä per viesti
+- Kenttänimet max ~20 merkkiä
+- Arvot max ~30 merkkiä (pidempi teksti katkeaa)
+
+---
+
+## 💡 Esimerkkiprojektit
+
+### 1. Perus LED-blinkkaus
+
+```cpp
+#include "DisplayClient.h"
+DisplayClient display(17);
+
+void setup() {
+  pinMode(LED_PIN, OUTPUT);
+  display.begin();
+}
+
+void loop() {
+  bool led = !digitalRead(LED_PIN);
+  digitalWrite(LED_PIN, led);
+
+  display.update("LED", led ? "ON" : "OFF");
+  delay(500);
+}
+```
+
+### 2. DHT22 Lämpötila/Kosteus
+
+```cpp
+#include "DisplayClient.h"
+#include "DHT.h"
+
+DisplayClient display(17);
+DHT dht(DHT_PIN, DHT22);
+
+void setup() {
+  dht.begin();
+  display.begin();
+}
+
+void loop() {
+  float t = dht.readTemperature();
+  float h = dht.readHumidity();
+
+  display.clear();
+  display.set("Temp", String(t, 1) + "C");
+  display.set("Humidity", String(h, 0) + "%");
+  display.send();
+
+  if (t > 30) display.alert("Too hot!");
+  else display.clearAlert();
+
+  delay(2000);
+}
+```
+
+### 3. WiFi Signaalin voimakkuus
+
+```cpp
+#include "DisplayClient.h"
+#include <WiFi.h>
+
+DisplayClient display(17);
+
+void setup() {
+  WiFi.begin("SSID", "password");
+  display.begin();
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    int rssi = WiFi.RSSI();
+
+    display.clear();
+    display.set("WiFi", "Connected");
+    display.set("RSSI", String(rssi) + " dBm");
+    display.set("IP", WiFi.localIP().toString());
+    display.send();
+  } else {
+    display.alert("WiFi disconnected!");
+  }
+
+  delay(1000);
+}
+```
+
+### 4. Akun jännite
+
+```cpp
+#include "DisplayClient.h"
+
+DisplayClient display(17);
+#define BAT_PIN 35
+
+void setup() {
+  pinMode(BAT_PIN, INPUT);
+  display.begin();
+}
+
+void loop() {
+  int raw = analogRead(BAT_PIN);
+  float voltage = (raw / 4095.0) * 3.3 * 2.0;  // Voltage divider
+
+  int percent = map(voltage * 100, 300, 420, 0, 100);
+  percent = constrain(percent, 0, 100);
+
+  display.clear();
+  display.set("Battery", String(voltage, 2) + "V");
+  display.set("Level", String(percent) + "%");
+  display.send();
+
+  if (percent < 20) {
+    display.alert("Low battery!");
+  }
+
+  delay(5000);
+}
+```
+
+### 5. LoRa RSSI/SNR (Roboter 9)
+
+```cpp
+#include "DisplayClient.h"
+
+DisplayClient display(17);
+
+void loop() {
+  // ... LoRa-vastaanotto ...
+
+  if (receiveLoRaMessage(remote, payload)) {
+    display.clear();
+    display.set("SEQ", remote.sequenceNumber);
+    display.set("RSSI", String(remote.rssi) + " dBm");
+    display.set("SNR", String(remote.snr) + " dB");
+    display.set("Packets", remote.messageCount);
+    display.send();
+  }
+
+  // ...
+}
+```
+
+---
+
+## 🎨 Customointi
 
 ### Muuta värejä
 
-`Roboter_Display_TFT.ino`:ssa:
+`Universal_Display_TFT.ino`:ssa:
+
 ```cpp
 #define COLOR_BG 0x0000          // Tausta (musta)
 #define COLOR_HEADER 0x001F      // Header (sininen)
@@ -293,88 +384,242 @@ Displayn pitäisi vastaanottaa viesti!
 #define COLOR_GOOD 0x07E0        // Hyvä (vihreä)
 #define COLOR_WARN 0xFD20        // Varoitus (oranssi)
 #define COLOR_BAD 0xF800         // Huono (punainen)
+#define COLOR_ALERT 0xFFE0       // Hälytys (keltainen)
 ```
 
-Värikoodi: RGB565 (16-bit)
-- R: 5 bittiä
-- G: 6 bittiä
-- B: 5 bittiä
+RGB565 värikoodit:
+- Punainen: `0xF800`
+- Vihreä: `0x07E0`
+- Sininen: `0x001F`
+- Valkoinen: `0xFFFF`
+- Musta: `0x0000`
+- Keltainen: `0xFFE0`
+- Syaani: `0x07FF`
+- Magenta: `0xF81F`
 
-### Muuta layout:ia
+### Muuta fonttikokoa
 
-Muuta region-korkeuksia:
+```cpp
+tft.setTextSize(2);  // 1=pieni, 2=normaali, 3=iso
+```
+
+### Muuta layoutia
+
 ```cpp
 #define HEADER_H 40      // Header korkeus
-#define STATUS_H 100     // Status-osion korkeus
-#define TELEMETRY_H 100  // Telemetry-osion korkeus
-#define ALERTS_H 60      // Alert-osion korkeus
+#define DATA_H 220       // Data-osion korkeus
+#define ALERT_H 40       // Alert-osion korkeus
 ```
 
-### Lisää uusi data-kenttä
+---
 
-1. Lisää `DisplayData` struct:iin:
-```cpp
-struct DisplayData {
-  // ...
-  int myNewField;
-};
+## 🐛 Vianetsintä
+
+### Näyttö ei reagoi
+
+1. **Tarkista johdot:**
+   - TX (päälaite) → RX (näyttö)
+   - GND → GND
+   - Johdot kunnossa?
+
+2. **Tarkista baudrate:**
+   - Molemmissa 115200?
+   - `display.begin()` kutsuttu?
+
+3. **Tarkista GPIO:**
+   - TX pin oikein?
+   - Pin vapaa (ei käytössä muualla)?
+
+4. **Serial Monitor:**
+   - Avaa päälaitteen Serial Monitor
+   - Näkyykö "→ Display: ..." viestit?
+
+### Teksti ei päivity
+
+1. **Kutsu `send()`:**
+   ```cpp
+   display.set("LED", "ON");
+   display.send();  // ← Tärkeä!
+   ```
+
+2. **Tarkista kentän nimi:**
+   - Sama nimi ylikirjoittaa vanhan
+   - Eri nimi luo uuden kentän
+
+3. **Liian pitkä teksti:**
+   - Max 30 merkkiä per arvo
+   - Katkeaa automaattisesti
+
+### "NO SIGNAL" näytössä
+
+1. **Ei dataa 5 sekuntiin:**
+   - Lähetätkö tarpeeksi usein?
+   - `delay()` liian pitkä?
+
+2. **Väärä RX pin:**
+   - Näytössä GPIO 18
+   - Tarkista `UART_RX_PIN`
+
+### Näyttö flikkaa
+
+1. **Päivitä harvemmin:**
+   ```cpp
+   delay(500);  // Vähintään 100ms välein
+   ```
+
+2. **Lähetä vain kun arvo muuttuu:**
+   ```cpp
+   static int lastValue = 0;
+   if (value != lastValue) {
+     display.update("Val", value);
+     lastValue = value;
+   }
+   ```
+
+---
+
+## 📐 Tekniset tiedot
+
+### Display-laite (ESP32-2432S022)
+
+| Komponentti | Tiedot |
+|-------------|--------|
+| MCU | ESP32-WROOM-32 |
+| Display | ST7789 2.4" 240x320 |
+| Interface | 8-bit Parallel (MCU8080) |
+| Touch | CST820 (I2C) - ei käytössä |
+| UART | RX=GPIO18, TX=GPIO19 |
+| Baudrate | 115200 (muutettavissa) |
+| Virta | USB-C, min 500mA |
+
+### Pin-varaukset
+
+**Display (integroitu):**
+- TFT Data: GPIO 12,13,14,15,25,27,32,33
+- TFT Control: GPIO 2,4,16,17
+- Touch I2C: GPIO 21,22 (valinnainen)
+- Backlight: GPIO 0
+
+**Vapaana:**
+- GPIO 18 (UART RX) ← Käytetään!
+- GPIO 19 (UART TX) - valinnainen
+- GPIO 5,23,26,34-39
+
+### Suorituskyky
+
+- Päivitysnopeus: 10 Hz (100ms)
+- Viive: <50ms
+- Max kenttiä: 20
+- Max viestipituus: 256 merkkiä
+- RAM-käyttö: ~2KB
+
+---
+
+## 🔄 Päivityshistoria
+
+### v2.0 (2025-01-05)
+- ✅ Poistettu LoRa-riippuvuus
+- ✅ UART-pohjainen yhteys
+- ✅ DisplayClient-kirjasto
+- ✅ Esimerkkiprojektit
+- ✅ Kattava dokumentaatio
+
+### v1.0 (2025-01-05)
+- ✅ Alkuperäinen LoRa-versio
+
+---
+
+## 💾 Tiedostot
+
+```
+Roboter_Display_TFT/
+├── Universal_Display_TFT.ino    Display-laitteen koodi
+├── display_config.h             TFT-konfiguraatio
+├── DisplayClient.h              Päälaitteen kirjasto
+├── README_UNIVERSAL.md          Tämä dokumentti
+└── examples/
+    ├── Example_Basic/           Perusesimerkki
+    ├── Example_Sensor/          Sensoriesimerkki
+    └── Example_Roboter9/        Roboter 9 integraatio
 ```
 
-2. Parsenna `parseLoRaMessage()`:ssa:
+---
+
+## 🤝 Integrointi olemassa olevaan projektiin
+
+### Roboter Gruppe 9
+
+1. Kopioi `DisplayClient.h` → `Roboter_Gruppe_9/`
+
+2. Lisää `Roboter_Gruppe_9.ino`:hon:
 ```cpp
-int myIdx = message.indexOf("MYNEW:");
-if (myIdx >= 0) {
-  displayData.myNewField = message.substring(myIdx + 6, ...).toInt();
+#include "DisplayClient.h"
+DisplayClient display(17);
+```
+
+3. Lisää `setup()`:iin:
+```cpp
+display.begin();
+```
+
+4. Lisää `loop()`:iin (sender):
+```cpp
+static unsigned long lastDisplay = 0;
+if (millis() - lastDisplay >= 2000) {
+  lastDisplay = millis();
+
+  display.clear();
+  display.set("SEQ", local.sequenceNumber);
+  display.set("LED", local.ledState ? "ON" : "OFF");
+  display.set("RSSI", String(remote.rssi) + " dBm");
+  display.send();
 }
 ```
 
-3. Näytä `drawStatus()` tai `drawTelemetry()`:ssä:
-```cpp
-String myStr = "My Field: " + String(displayData.myNewField);
-tft.drawString(myStr, 20, y);
-```
+### Muu projekti
+
+1. Kopioi `DisplayClient.h` projektiisi
+2. Include ja luo client
+3. Kutsu `begin()` setup:issa
+4. Lähetä dataa `set()` + `send()`
 
 ---
 
-## 🎯 Seuraavat Askeleet
+## 🎓 Oppimateriaali
 
-### Vaihtoehto 1: Kosketusnäyttö
+### Video-tutoriaalit (tulossa)
 
-Lisää CST820 touch-tuki (ei vielä toteutettu):
-- Kalibroi/nollaa painike
-- Hiljennä hälytys -painike
-- Vaihda näkymää (status/graph/history)
+- Peruskytkentä ja testaus
+- Sensoridatan näyttäminen
+- Roboter 9 integraatio
+- Custom UI-suunnittelu
 
-### Vaihtoehto 2: Graafinen käyrä
+### Linkit
 
-Lisää RSSI/Battery history-käyrä:
-- Tallennetaan viimeiset 100 arvoa
-- Piirretään line chart
-- Zoom-toiminto
-
-### Vaihtoehto 3: Useampi sivu
-
-Lisää sivunavigaatio:
-- Sivu 1: Status
-- Sivu 2: Telemetry
-- Sivu 3: Alerts
-- Sivu 4: Statistics
+- [LovyanGFX kirjasto](https://github.com/lovyan03/LovyanGFX)
+- [ESP32 UART dokumentaatio](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/uart.html)
+- [ESP32-2432S022 datasheet](https://github.com/makerfabs/ESP32-2432S022)
 
 ---
 
-## 📄 Tiedostot
+## 📞 Tuki
 
-- `Roboter_Display_TFT.ino` - Pääohjelma (display + LoRa)
-- `display_config.h` - ESP32-2432S022 TFT-konfiguraatio
-- `README.md` - Tämä dokumentti
+**Ongelma?**
+1. Lue vianetsintä-osio
+2. Tarkista esimerkit
+3. Testaa Basic-esimerkki ensin
+4. Tarkista Serial Monitor
+
+**Vinkkejä:**
+- Aloita yksinkertaisesta
+- Testaa yksi asia kerrallaan
+- Käytä Serial.println() debuggaukseen
+- Tarkista johdot multimittarilla
 
 ---
 
-**Valmis käyttöön! 🚀**
+**Valmis käyttöön!** 🚀
 
-Jos ongelmia, tarkista:
-1. Kirjastot asennettu
-2. LoRa-kytkennät oikein (TX ↔ RX ristiin!)
-3. LoRa-osoitteet oikein (Display = 3)
-4. Network ID sama (6)
-5. Pää-ESP32 lähettää osoitteeseen 3
+Kokeile ensin `Example_Basic` ja laajenna siitä eteenpäin.
+
+Onnea projektiin! 🎉
