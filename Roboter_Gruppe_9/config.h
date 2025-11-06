@@ -59,10 +59,11 @@
 // =============== DISPLAY STATION ================================
 // Send real-time data to TFT display station (ESP32-2432S022)
 // Uses UART (Serial) connection - NO LoRa needed!
-// Connection: Main ESP32 TX (GPIO 17) → Display RX (GPIO 18)
-#define ENABLE_DISPLAY_OUTPUT false  // Enable sending data to display
+// Connection: Main ESP32 TX (GPIO 5) → Display RX (GPIO 18)
+// Note: GPIO 17 is used by MODE_GND_PIN, so we use GPIO 5 instead
+#define ENABLE_DISPLAY_OUTPUT true   // Enable sending data to display
 #define DISPLAY_UPDATE_INTERVAL 2000 // Send to display every 2 seconds
-#define DISPLAY_TX_PIN 17            // TX pin (connects to display RX)
+#define DISPLAY_TX_PIN 5             // TX pin (connects to display RX)
 
 // =============== FEATURE FLAGS ================================
 // 🚀 EXPERIMENTAL FEATURES - Easily enable/disable for testing
