@@ -11,13 +11,17 @@
   - 2.4" ST7789 TFT (240x320 → landscape 320x240)
   - 8-bit parallel interface
 
-  Kytkentä (VAIN 2 JOHTOA!):
-  ┌────────────────┐           ┌────────────────┐
-  │   Pää-ESP32    │           │  Display-ESP32 │
-  │                │           │                │
-  │  TX (GPIO 17) ─┼──────────►│─ RX (GPIO 18) │
-  │  GND          ─┼───────────│─ GND          │
-  └────────────────┘           └────────────────┘
+  VIRRANSYÖTTÖ:
+  - Display-ESP32 syötetään OMASTA USB-kaapelista tai 5V lähteestä
+  - EI syötetä virta toiselta ESP32:lta!
+
+  UART-kytkentä (VAIN 2 JOHTOA!):
+  ┌────────────────┐           ┌────────────────────────────┐
+  │  Robot ESP32   │           │  Display ESP32-2432S022    │
+  │                │           │  (syötetty omasta USB:sta) │
+  │  TX (GPIO 23) ─┼──────────►│─ RX (GPIO 18)             │
+  │  GND          ─┼───────────│─ GND (signaalin referenssi)│
+  └────────────────┘           └────────────────────────────┘
 
   Protokolla (CSV):
   - "KEY:VALUE,KEY2:VALUE2,..."
