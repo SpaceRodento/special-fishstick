@@ -1,10 +1,10 @@
 /*
-  SIMPLE DISPLAY DEVICE
+  SIMPLE DISPLAY DEVICE (UART0 VERSION)
 
-  Minimaalinen näyttölaite ESP32-2432S022:lle
-  - Näyttää vastaanotetun UART-datan
-  - Toimii heti ilman konfigurointia
-  - Testattu ja varma toimivuus
+  Uses physical RX/TX connector (GPIO 3/1 = UART0)
+
+  IMPORTANT: Serial Monitor won't work properly since UART0
+  is shared between USB and physical connector!
 */
 
 #include <Arduino.h>
@@ -60,11 +60,8 @@ public:
 };
 
 static LGFX tft;
-HardwareSerial DataSerial(1);
 
-// Pins
-#define UART_RX_PIN 18
-#define UART_TX_PIN 19
+// Pins - Physical RX/TX connector uses UART0 (GPIO 3/1)
 #define UART_BAUDRATE 115200
 #define BACKLIGHT_PIN 0
 
@@ -79,7 +76,8 @@ unsigned long lastDataTime = 0;
 int messageCount = 0;
 
 void setup() {
-  Serial.begin(115200);
+  // Serial (UART0) is used for physical RX/TX connector
+  Serial.begin(UART_BAUDRATE);
   delay(100);
 
   // Backlight
@@ -98,18 +96,15 @@ void setup() {
   tft.setCursor(10, 8);
   tft.print("SIMPLE DISPLAY");
 
-  // UART
-  pinMode(UART_RX_PIN, INPUT);
-  pinMode(UART_TX_PIN, OUTPUT);
-  DataSerial.begin(UART_BAUDRATE, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
-
   // Status
   tft.setTextSize(1);
   tft.setCursor(10, 40);
   tft.setTextColor(COLOR_GOOD, COLOR_BG);
   tft.println("Ready - Waiting for data...");
+  tft.setCursor(10, 55);
+  tft.setTextColor(COLOR_WARN, COLOR_BG);
+  tft.println("(Using physical RX connector)");
 
-  Serial.println("Display ready!");
   lastDataTime = millis();
 }
 
@@ -123,22 +118,16 @@ void loop() {
       lastDataTime = millis();
       messageCount++;
 
-      // Debug to serial FIRST
-      Serial.print("RX [");
-      Serial.print(messageCount);
-      Serial.print("]: ");
-      Serial.println(msg);
-
       // Parse CSV data: KEY:VALUE,KEY2:VALUE2,...
-      tft.fillRect(0, 60, 320, 180, COLOR_BG);  // Clear data area
+      tft.fillRect(0, 70, 320, 140, COLOR_BG);  // Clear data area
       yield();  // Feed watchdog after fillRect
 
-      int y = 70;
+      int y = 80;
       int start = 0;
       int itemCount = 0;
       tft.setTextSize(2);
 
-      while (start < msg.length() && itemCount < 8) {  // Limit to 8 items
+      while (start < msg.length() && itemCount < 7) {  // Limit to 7 items
         yield();  // Feed watchdog in loop!
 
         int comma = msg.indexOf(',', start);
@@ -161,7 +150,6 @@ void loop() {
 
           y += 20;
           itemCount++;
-          if (y > 200) break;  // Don't overflow screen
         }
 
         start = comma + 1;
@@ -180,9 +168,9 @@ void loop() {
 
   // Check for timeout (no data for 5 seconds)
   if (millis() - lastDataTime > 5000 && messageCount > 0) {
-    tft.fillRect(0, 60, 320, 20, COLOR_BG);
+    tft.fillRect(0, 70, 320, 20, COLOR_BG);
     tft.setTextSize(1);
-    tft.setCursor(10, 65);
+    tft.setCursor(10, 75);
     tft.setTextColor(COLOR_WARN, COLOR_BG);
     tft.println("NO SIGNAL - Check wiring!");
     lastDataTime = millis();  // Reset to avoid spam
