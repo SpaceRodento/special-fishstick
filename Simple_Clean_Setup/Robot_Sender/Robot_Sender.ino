@@ -11,9 +11,10 @@
 
 // UART Configuration
 #define UART_TX_PIN 23         // Robot TX → Display RX
+#define UART_RX_PIN -1         // Not used (TX only)
 #define UART_BAUDRATE 115200
 
-HardwareSerial DisplaySerial(2);
+HardwareSerial DisplaySerial(1);  // Use Serial1 instead of Serial2
 
 // Demo data
 int counter = 0;
@@ -25,7 +26,8 @@ void setup() {
   delay(100);
 
   // Setup UART for display
-  DisplaySerial.begin(UART_BAUDRATE, SERIAL_8N1, -1, UART_TX_PIN);
+  pinMode(UART_TX_PIN, OUTPUT);  // Explicitly set TX as output
+  DisplaySerial.begin(UART_BAUDRATE, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
 
   Serial.println("Robot Sender Ready!");
   Serial.println("Sending data to display every 2 seconds...");
