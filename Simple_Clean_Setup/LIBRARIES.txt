@@ -1,0 +1,37 @@
+REQUIRED LIBRARIES FOR SIMPLE CLEAN SETUP
+==========================================
+
+Display Device (ESP32-2432S022):
+---------------------------------
+1. LovyanGFX
+   - Arduino IDE: Library Manager → Search "LovyanGFX" → Install
+   - Version: Latest (tested with 1.1.9+)
+   - GitHub: https://github.com/lovyan03/LovyanGFX
+
+Robot Sender (Any ESP32):
+--------------------------
+No additional libraries required!
+Uses only Arduino core libraries.
+
+ESP32 Board Support:
+--------------------
+If you haven't installed ESP32 support yet:
+
+1. Arduino IDE → Preferences
+2. Additional Board Manager URLs:
+   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+3. Tools → Board → Boards Manager → Search "ESP32" → Install
+
+Board Selection:
+----------------
+- Display: ESP32 Dev Module
+- Robot: ESP32 Dev Module (or your specific board)
+
+Upload Settings (Both devices):
+--------------------------------
+- Upload Speed: 921600
+- Flash Frequency: 80MHz
+- Flash Mode: QIO
+- Partition Scheme: Default 4MB with spiffs
+
+That's it! Simple and clean. 🚀
