@@ -123,14 +123,24 @@ void loop() {
       lastDataTime = millis();
       messageCount++;
 
+      // Debug to serial FIRST
+      Serial.print("RX [");
+      Serial.print(messageCount);
+      Serial.print("]: ");
+      Serial.println(msg);
+
       // Parse CSV data: KEY:VALUE,KEY2:VALUE2,...
       tft.fillRect(0, 60, 320, 180, COLOR_BG);  // Clear data area
+      yield();  // Feed watchdog after fillRect
 
       int y = 70;
       int start = 0;
+      int itemCount = 0;
       tft.setTextSize(2);
 
-      while (start < msg.length()) {
+      while (start < msg.length() && itemCount < 8) {  // Limit to 8 items
+        yield();  // Feed watchdog in loop!
+
         int comma = msg.indexOf(',', start);
         if (comma == -1) comma = msg.length();
 
@@ -150,6 +160,7 @@ void loop() {
           tft.println(value);
 
           y += 20;
+          itemCount++;
           if (y > 200) break;  // Don't overflow screen
         }
 
@@ -157,18 +168,13 @@ void loop() {
       }
 
       // Show message count
+      yield();  // Feed watchdog before more TFT ops
       tft.fillRect(0, 210, 320, 20, COLOR_BG);
       tft.setTextSize(1);
       tft.setCursor(10, 215);
       tft.setTextColor(COLOR_GOOD, COLOR_BG);
       tft.print("Messages: ");
       tft.print(messageCount);
-
-      // Debug to serial
-      Serial.print("RX [");
-      Serial.print(messageCount);
-      Serial.print("]: ");
-      Serial.println(msg);
     }
   }
 
@@ -182,5 +188,5 @@ void loop() {
     lastDataTime = millis();  // Reset to avoid spam
   }
 
-  delay(10);
+  delay(10);  // Small delay to prevent tight loop
 }
