@@ -57,15 +57,14 @@ public:
    * Initialize serial connection to display
    */
   void begin() {
-    // Ensure TX pin is set to OUTPUT mode
-    pinMode(txPin, OUTPUT);
+    // UART begin() handles pin configuration automatically
+    // DO NOT call pinMode() before serial->begin() - it prevents UART from taking control!
 
     if (rxPin == -1) {
       // TX only mode (most common)
       serial->begin(baudrate, SERIAL_8N1, -1, txPin);
     } else {
       // Full duplex mode
-      pinMode(rxPin, INPUT);
       serial->begin(baudrate, SERIAL_8N1, rxPin, txPin);
     }
 
