@@ -58,6 +58,19 @@
 #define BACKLIGHT_PIN 0
 #define BACKLIGHT_BRIGHTNESS 200        // 0-255
 
+// =============== DISPLAY MODE ================================
+// Signal Testing Mode: Optimized for LoRa signal testing and analysis
+// - Shows signal quality bar on right side
+// - Emphasizes RSSI/SNR data
+// - Compact layout for field testing
+// Set to false for normal operation mode (TBD)
+#define SIGNAL_TESTING_MODE true
+
+// =============== FONT SIZES ================================
+#define FONT_SMALL 1     // Detailed info, labels
+#define FONT_NORMAL 2    // Main content, readable data
+#define FONT_LARGE 4     // Important numbers, titles
+
 // =============== UPDATE INTERVALS ================================
 #define DISPLAY_UPDATE_INTERVAL 500     // Update display every 500ms (reduced from 100ms to avoid flicker)
 #define DATA_TIMEOUT 5000               // No data timeout (5s)
@@ -103,13 +116,43 @@ String loraConnectionState = "UNKNOWN";  // OK, WEAK, LOST, UNKNOWN
 #define DATA_Y 30
 #define DATA_H 180
 #define ALERT_Y 210
-#define ALERT_H 30
+#define ALERT_H 40       // Increased from 30 to fit more info
+
+// Signal quality bar (right side)
+#define SIGNAL_BAR_X 280
+#define SIGNAL_BAR_Y (DATA_Y + 10)
+#define SIGNAL_BAR_W 30
+#define SIGNAL_BAR_H (DATA_H - 20)
+
+// =============== SIGNAL QUALITY HELPERS ================================
+// Based on field testing data:
+// RSSI: -40dBm (excellent) to -100dBm (poor)
+// SNR: +20dB (excellent) to -10dB (poor)
+
+int calculateSignalQuality(int rssi, int snr) {
+  // RSSI contribution: -40 to -100 dBm → 100% to 0%
+  int rssiPercent = map(constrain(rssi, -100, -40), -100, -40, 0, 100);
+
+  // SNR contribution: -10 to +20 dB → 0% to 30% bonus
+  int snrBonus = map(constrain(snr, -10, 20), -10, 20, 0, 30);
+
+  // Total quality (max 100%)
+  int quality = constrain(rssiPercent + snrBonus, 0, 100);
+  return quality;
+}
+
+uint16_t getSignalQualityColor(int quality) {
+  if (quality >= 70) return COLOR_GOOD;   // Green (70-100%)
+  if (quality >= 40) return COLOR_WARN;   // Orange (40-69%)
+  return COLOR_BAD;                        // Red (0-39%)
+}
 
 // =============== FUNCTION PROTOTYPES ================================
 void parseMessage(String message);
 void updateDisplay();
 void drawHeader();
 void drawData();
+void drawSignalQualityBar();
 void drawAlert();
 String getFieldValue(String key);
 void setFieldValue(String key, String value);
@@ -291,6 +334,9 @@ void clearAllFields() {
 void updateDisplay() {
   drawHeader();
   drawData();
+  #if SIGNAL_TESTING_MODE
+  drawSignalQualityBar();
+  #endif
   drawAlert();
 }
 
@@ -347,158 +393,214 @@ void drawHeader() {
 }
 
 void drawData() {
-  // Clear data area
-  tft.fillRect(0, DATA_Y, TFT_WIDTH, DATA_H, COLOR_BG);
+  // Clear data area (leave space for signal bar on right if enabled)
+  #if SIGNAL_TESTING_MODE
+  int dataWidth = SIGNAL_BAR_X - 5;  // Leave space for signal bar
+  #else
+  int dataWidth = TFT_WIDTH;
+  #endif
+  tft.fillRect(0, DATA_Y, dataWidth, DATA_H, COLOR_BG);
 
   if (fieldCount == 0) {
     // No data yet
     tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
+    tft.setTextSize(FONT_SMALL);
     tft.setTextColor(COLOR_LABEL);
-    tft.drawString("No data received", TFT_WIDTH/2, DATA_Y + DATA_H/2);
+    tft.drawString("No data received", dataWidth/2, DATA_Y + DATA_H/2);
     return;
   }
 
-  // Get important fields for center display
+  // Get important fields
   String loraPkts = getFieldValue("LoRaPkts");
   String uptime = getFieldValue("Uptime");
   String mode = getFieldValue("Mode");
+  String count = getFieldValue("Count");
+  String touch = getFieldValue("TOUCH");
 
-  // === CENTER AREA: Large important info ===
-  int centerY = DATA_Y + 50;
-
-  // LoRa Packet Counter (large, centered)
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextSize(1);
-  tft.setTextColor(COLOR_LABEL);
-  tft.drawString("LoRa Packets", TFT_WIDTH/2, centerY);
-
-  tft.setTextSize(4);
-  tft.setTextColor(COLOR_TEXT);
-  String pktsDisplay = (loraPkts.length() > 0) ? loraPkts : "0";
-  tft.drawString(pktsDisplay, TFT_WIDTH/2, centerY + 25);
-
-  // Uptime Timer (large, centered below packets)
-  tft.setTextSize(1);
-  tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Uptime", TFT_WIDTH/2, centerY + 65);
-
-  tft.setTextSize(3);
-  tft.setTextColor(COLOR_TEXT);
-  String uptimeDisplay = (uptime.length() > 0) ? uptime : "0s";
-  tft.drawString(uptimeDisplay, TFT_WIDTH/2, centerY + 85);
-
-  // === SIDE INFO: Mode and other compact data ===
+  // === MAIN INFO AREA: Normal-sized, readable ===
   tft.setTextDatum(TL_DATUM);
-  tft.setTextSize(1);
+  tft.setTextSize(FONT_NORMAL);
 
-  int sideX = 5;
-  int sideY = DATA_Y + 10;
-  int lineHeight = 18;
+  int x = 10;
+  int y = DATA_Y + 15;
+  int lineHeight = 28;  // Spacing for normal font
+
+  // Mode (RECEIVER/SENDER)
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("Mode:", x, y);
+  tft.setTextColor(COLOR_TEXT);
+  tft.drawString(mode.length() > 0 ? mode : "?", x + 70, y);
+  y += lineHeight;
+
+  // LoRa Packets
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("Packets:", x, y);
+  tft.setTextColor(COLOR_TEXT);
+  tft.drawString(loraPkts.length() > 0 ? loraPkts : "0", x + 100, y);
+  y += lineHeight;
+
+  // Count (total messages)
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("Count:", x, y);
+  tft.setTextColor(COLOR_TEXT);
+  tft.drawString(count.length() > 0 ? count : "0", x + 90, y);
+  y += lineHeight;
+
+  // Touch status
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("Touch:", x, y);
+  tft.setTextColor(COLOR_TEXT);
+  tft.drawString(touch.length() > 0 ? touch : "?", x + 85, y);
+  y += lineHeight;
+
+  // Uptime
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("Uptime:", x, y);
+  tft.setTextColor(COLOR_TEXT);
+  tft.drawString(uptime.length() > 0 ? uptime : "0s", x + 100, y);
+  y += lineHeight;
+
+  // Additional fields (if any)
+  tft.setTextSize(FONT_SMALL);
+  int smallY = y + 5;
   int fieldNum = 0;
 
-  // Show other fields (excluding the ones already shown)
-  for (int i = 0; i < fieldCount && fieldNum < 8; i++) {
-    // Skip fields already displayed in center or status bar
-    if (fields[i].key == "LoRaPkts" || fields[i].key == "Uptime" ||
-        fields[i].key == "ConnState" || fields[i].key == "RSSI" ||
-        fields[i].key == "SNR") {
+  for (int i = 0; i < fieldCount && fieldNum < 3; i++) {
+    // Skip already displayed fields
+    if (fields[i].key == "Mode" || fields[i].key == "LoRaPkts" ||
+        fields[i].key == "Count" || fields[i].key == "TOUCH" ||
+        fields[i].key == "Uptime" || fields[i].key == "ConnState" ||
+        fields[i].key == "RSSI" || fields[i].key == "SNR" ||
+        fields[i].key == "LED" || fields[i].key == "SEQ") {
       continue;
     }
 
-    int yPos = sideY + (fieldNum * lineHeight);
-
-    // Draw key (label)
     tft.setTextColor(COLOR_LABEL);
     String keyStr = fields[i].key + ":";
-    tft.drawString(keyStr, sideX, yPos);
-
-    // Draw value
+    tft.drawString(keyStr, x, smallY);
     tft.setTextColor(COLOR_TEXT);
-    int valueX = sideX + tft.textWidth(keyStr) + 3;
-    tft.drawString(fields[i].value, valueX, yPos);
-
+    tft.drawString(fields[i].value, x + 60, smallY);
+    smallY += 15;
     fieldNum++;
   }
 }
 
+void drawSignalQualityBar() {
+  // Signal quality bar on right side (only in signal testing mode)
+
+  // Get signal values
+  String rssiStr = getFieldValue("RSSI");
+  String snrStr = getFieldValue("SNR");
+  String connState = getFieldValue("ConnState");
+
+  // Parse values
+  int rssi = (rssiStr.length() > 0) ? rssiStr.substring(0, rssiStr.indexOf("d")).toInt() : -100;
+  int snr = (snrStr.length() > 0) ? snrStr.substring(0, snrStr.indexOf("d")).toInt() : -10;
+
+  // Calculate quality (0-100%)
+  int quality = calculateSignalQuality(rssi, snr);
+  uint16_t barColor = getSignalQualityColor(quality);
+
+  // Draw bar background (black)
+  tft.fillRect(SIGNAL_BAR_X, SIGNAL_BAR_Y, SIGNAL_BAR_W, SIGNAL_BAR_H, COLOR_BG);
+
+  // Draw bar border (white)
+  tft.drawRect(SIGNAL_BAR_X, SIGNAL_BAR_Y, SIGNAL_BAR_W, SIGNAL_BAR_H, COLOR_TEXT);
+
+  // Draw filled bar (bottom to top based on quality)
+  if (quality > 0 && connState.length() > 0 && connState != "UNKNOWN") {
+    int fillHeight = (SIGNAL_BAR_H - 4) * quality / 100;
+    int fillY = SIGNAL_BAR_Y + SIGNAL_BAR_H - 2 - fillHeight;
+
+    // Animated: slight pulse effect (optional)
+    static int pulsePhase = 0;
+    pulsePhase = (pulsePhase + 1) % 10;
+    if (pulsePhase < 5) fillHeight += 1;  // Subtle animation
+
+    tft.fillRect(SIGNAL_BAR_X + 2, fillY, SIGNAL_BAR_W - 4, fillHeight, barColor);
+  }
+
+  // Draw percentage label below bar
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextSize(FONT_SMALL);
+  tft.setTextColor(COLOR_LABEL);
+  String qualityText = String(quality) + "%";
+  tft.drawString(qualityText, SIGNAL_BAR_X + SIGNAL_BAR_W/2, SIGNAL_BAR_Y + SIGNAL_BAR_H + 10);
+}
+
 void drawAlert() {
-  // LoRa Status Bar - comprehensive LoRa connection information
+  // LoRa Status Bar - signal quality information
+  // Color scheme: Gray (no connection) / Orange (connection active)
 
   // Extract LoRa data from fields
   String connState = getFieldValue("ConnState");
   String rssi = getFieldValue("RSSI");
   String snr = getFieldValue("SNR");
-  String loraPkts = getFieldValue("LoRaPkts");
 
   if (connState.length() == 0) {
     connState = loraConnectionState;  // Use global if not in fields
   }
   loraConnectionState = connState;
 
-  // Determine color and status text based on connection state
-  uint16_t bgColor = COLOR_BG;
-  String statusIcon = "?";
-  String statusName = "UNKNOWN";
+  // Parse RSSI/SNR for quality evaluation
+  int rssiValue = (rssi.length() > 0) ? rssi.substring(0, rssi.indexOf("d")).toInt() : -100;
+  int snrValue = (snr.length() > 0) ? snr.substring(0, snr.indexOf("d")).toInt() : -10;
+  int quality = calculateSignalQuality(rssiValue, snrValue);
 
-  if (connState == "OK" || connState == "CONNECTED") {
-    bgColor = COLOR_GOOD;  // Green
-    statusIcon = "✓";
-    statusName = "ONLINE";
-  } else if (connState == "WEAK") {
-    bgColor = COLOR_WARN;  // Orange
-    statusIcon = "~";
-    statusName = "WEAK";
+  // Determine background color:
+  // - Gray: No connection (UNKNOWN, LOST, CONNECTING)
+  // - Orange: Connection active (OK, WEAK)
+  uint16_t bgColor = COLOR_LABEL;  // Default: Gray
+  String statusName = "NO LINK";
+
+  if (connState == "OK" || connState == "CONNECTED" || connState == "WEAK") {
+    bgColor = COLOR_WARN;  // Orange - connection active
+    statusName = "ACTIVE";
   } else if (connState == "LOST") {
-    bgColor = COLOR_BAD;   // Red
-    statusIcon = "✗";
-    statusName = "OFFLINE";
+    bgColor = COLOR_LABEL;  // Gray
+    statusName = "LOST";
   } else if (connState == "CONNECT") {
     bgColor = COLOR_LABEL;  // Gray
-    statusIcon = "…";
-    statusName = "CONNECT";
-  } else {
-    bgColor = COLOR_LABEL;  // Gray
-    statusIcon = "?";
-    statusName = connState;
+    statusName = "CONNECTING";
   }
 
   // Draw background
   tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, bgColor);
 
-  // Build status bar text with all LoRa information
-  tft.setTextDatum(ML_DATUM);  // Middle-left alignment
-  tft.setTextSize(2);
+  // === UPPER LINE: Title and status ===
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextSize(FONT_NORMAL);
   tft.setTextColor(COLOR_TEXT);
 
-  // "LoRa:" label
   int x = 5;
-  int y = ALERT_Y + ALERT_H/2;
+  int y = ALERT_Y + 5;
+
+  // "LoRa:" label
   tft.drawString("LoRa:", x, y);
-  x += tft.textWidth("LoRa:") + 5;
+  x += tft.textWidth("LoRa:") + 8;
 
-  // Status (ONLINE/OFFLINE/WEAK/etc)
+  // Status (ACTIVE/NO LINK/etc)
   tft.drawString(statusName, x, y);
-  x += tft.textWidth(statusName) + 10;
 
-  // RSSI (if available)
-  tft.setTextSize(1);
+  // === LOWER LINE: Signal metrics (normal font) ===
+  x = 5;
+  y = ALERT_Y + 25;
+  tft.setTextSize(FONT_NORMAL);
+
+  // RSSI
   if (rssi.length() > 0) {
-    String rssiText = "RSSI:" + rssi;
-    tft.drawString(rssiText, x, y - 5);
-    x += tft.textWidth(rssiText) + 8;
+    tft.drawString("RSSI:" + rssi, x, y);
+    x += tft.textWidth("RSSI:" + rssi) + 12;
   }
 
-  // SNR (if available)
+  // SNR
   if (snr.length() > 0) {
-    String snrText = "SNR:" + snr;
-    tft.drawString(snrText, x, y - 5);
-    x += tft.textWidth(snrText) + 8;
+    tft.drawString("SNR:" + snr, x, y);
+    x += tft.textWidth("SNR:" + snr) + 12;
   }
 
-  // LoRa packet count (if available)
-  if (loraPkts.length() > 0) {
-    String pktsText = "Pkts:" + loraPkts;
-    tft.drawString(pktsText, x, y - 5);
+  // Quality percentage
+  if (connState == "OK" || connState == "WEAK") {
+    tft.drawString("Q:" + String(quality) + "%", x, y);
   }
 }
