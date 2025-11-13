@@ -623,16 +623,11 @@ void loop() {
 
   // Spinner
   updateSpinner();
-  
-  // LED blink
-  if (millis() - timing.lastLED >= 500) {
-    timing.lastLED = millis();
-    local.ledState = !local.ledState;
-    digitalWrite(LED_PIN, local.ledState);
-    local.ledCount++;
-    if (local.ledCount >= 80) local.ledCount = 0;
-  }
-  
+
+  // LED is now synced with LoRa transmission/reception (removed independent blink)
+  // Sender: LED toggles when message sent
+  // Receiver: LED toggles when message received
+
   // Touch sensor
   if (millis() - timing.lastSensor >= 200) {
     timing.lastSensor = millis();
@@ -647,6 +642,12 @@ void loop() {
     if (receiveLoRaMessage(remote, payload)) {
       parsePayload(payload);
       remote.messageCount++;
+
+      // Toggle LED on message reception (synced with LoRa)
+      local.ledState = !local.ledState;
+      digitalWrite(LED_PIN, local.ledState);
+      local.ledCount++;
+      if (local.ledCount >= 80) local.ledCount = 0;
 
       // Update health monitoring
       updateRSSI(health, remote.rssi);
@@ -706,6 +707,12 @@ void loop() {
     // SENDER: Send every 2 seconds
     if (millis() - timing.lastSend >= 2000) {
       timing.lastSend = millis();
+
+      // Toggle LED on message transmission (synced with LoRa)
+      local.ledState = !local.ledState;
+      digitalWrite(LED_PIN, local.ledState);
+      local.ledCount++;
+      if (local.ledCount >= 80) local.ledCount = 0;
 
       // Include sequence number in payload
       String payload = "SEQ:" + String(local.sequenceNumber) +

@@ -298,21 +298,37 @@ void drawHeader() {
   // Header background
   tft.fillRect(0, HEADER_Y, TFT_WIDTH, HEADER_H, COLOR_HEADER);
 
-  // Title
+  // Title with LED indicator
   tft.setTextDatum(TL_DATUM);
   tft.setTextSize(2);
   tft.setTextColor(COLOR_TEXT);
   tft.drawString("ROBOTER 9", 5, HEADER_Y + 7);
+
+  // LED indicator (blinking circle) - synced with LoRa transmission
+  String ledValue = getFieldValue("LED");
+  bool ledOn = (ledValue == "ON" || ledValue == "1");
+  int ledX = 120;  // Position after title
+  int ledY = HEADER_Y + 15;
+  int ledRadius = 6;
+
+  // Draw LED circle
+  if (ledOn) {
+    tft.fillCircle(ledX, ledY, ledRadius, COLOR_BAD);    // Red when ON
+    tft.drawCircle(ledX, ledY, ledRadius, COLOR_TEXT);   // White border
+  } else {
+    tft.fillCircle(ledX, ledY, ledRadius, COLOR_BG);     // Black when OFF
+    tft.drawCircle(ledX, ledY, ledRadius, COLOR_LABEL);  // Gray border
+  }
 
   // TFT (UART) Connection indicator (top right)
   tft.setTextDatum(TR_DATUM);
   tft.setTextSize(1);
   if (dataConnected) {
     tft.setTextColor(COLOR_GOOD);
-    tft.drawString("TFT (UART) ON", TFT_WIDTH - 5, HEADER_Y + 3);
+    tft.drawString("UART ON", TFT_WIDTH - 5, HEADER_Y + 3);
   } else {
     tft.setTextColor(COLOR_BAD);
-    tft.drawString("TFT (UART) OFF", TFT_WIDTH - 5, HEADER_Y + 3);
+    tft.drawString("UART OFF", TFT_WIDTH - 5, HEADER_Y + 3);
   }
 
   // Data status (below UART indicator)
@@ -324,7 +340,7 @@ void drawHeader() {
     tft.drawString("WAITING", TFT_WIDTH - 5, HEADER_Y + 13);
   }
 
-  // Packet counter (bottom right)
+  // Packet counter (bottom right) - UART packets received by display
   tft.setTextColor(COLOR_LABEL);
   String pktStr = "PKT:" + String(packetsReceived);
   tft.drawString(pktStr, TFT_WIDTH - 5, HEADER_Y + 23);
@@ -343,72 +359,146 @@ void drawData() {
     return;
   }
 
-  // Display fields in grid layout (landscape optimized)
-  // 2 columns, compact layout for 320x240
-  int x = 5;
-  int y = DATA_Y + 5;
-  int colWidth = (TFT_WIDTH - 15) / 2;  // 2 columns
-  int lineHeight = 20;
-  int col = 0;
+  // Get important fields for center display
+  String loraPkts = getFieldValue("LoRaPkts");
+  String uptime = getFieldValue("Uptime");
+  String mode = getFieldValue("Mode");
 
+  // === CENTER AREA: Large important info ===
+  int centerY = DATA_Y + 50;
+
+  // LoRa Packet Counter (large, centered)
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("LoRa Packets", TFT_WIDTH/2, centerY);
+
+  tft.setTextSize(4);
+  tft.setTextColor(COLOR_TEXT);
+  String pktsDisplay = (loraPkts.length() > 0) ? loraPkts : "0";
+  tft.drawString(pktsDisplay, TFT_WIDTH/2, centerY + 25);
+
+  // Uptime Timer (large, centered below packets)
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("Uptime", TFT_WIDTH/2, centerY + 65);
+
+  tft.setTextSize(3);
+  tft.setTextColor(COLOR_TEXT);
+  String uptimeDisplay = (uptime.length() > 0) ? uptime : "0s";
+  tft.drawString(uptimeDisplay, TFT_WIDTH/2, centerY + 85);
+
+  // === SIDE INFO: Mode and other compact data ===
   tft.setTextDatum(TL_DATUM);
   tft.setTextSize(1);
 
-  for (int i = 0; i < fieldCount && i < 16; i++) {  // Max 16 fields (8 per column)
-    int xPos = x + (col * colWidth);
-    int yPos = y + ((i / 2) * lineHeight);
+  int sideX = 5;
+  int sideY = DATA_Y + 10;
+  int lineHeight = 18;
+  int fieldNum = 0;
+
+  // Show other fields (excluding the ones already shown)
+  for (int i = 0; i < fieldCount && fieldNum < 8; i++) {
+    // Skip fields already displayed in center or status bar
+    if (fields[i].key == "LoRaPkts" || fields[i].key == "Uptime" ||
+        fields[i].key == "ConnState" || fields[i].key == "RSSI" ||
+        fields[i].key == "SNR") {
+      continue;
+    }
+
+    int yPos = sideY + (fieldNum * lineHeight);
 
     // Draw key (label)
     tft.setTextColor(COLOR_LABEL);
     String keyStr = fields[i].key + ":";
-    tft.drawString(keyStr, xPos, yPos);
+    tft.drawString(keyStr, sideX, yPos);
 
     // Draw value
     tft.setTextColor(COLOR_TEXT);
-    int valueX = xPos + tft.textWidth(keyStr) + 3;
+    int valueX = sideX + tft.textWidth(keyStr) + 3;
     tft.drawString(fields[i].value, valueX, yPos);
 
-    // Alternate columns
-    col = (col + 1) % 2;
+    fieldNum++;
   }
 }
 
 void drawAlert() {
-  // Show LoRa connection status (replaces old alert system)
-  // Extract ConnState from fields (set by parseMessage)
+  // LoRa Status Bar - comprehensive LoRa connection information
+
+  // Extract LoRa data from fields
   String connState = getFieldValue("ConnState");
+  String rssi = getFieldValue("RSSI");
+  String snr = getFieldValue("SNR");
+  String loraPkts = getFieldValue("LoRaPkts");
+
   if (connState.length() == 0) {
     connState = loraConnectionState;  // Use global if not in fields
   }
-
-  // Update global state
   loraConnectionState = connState;
 
-  // Determine color and text based on connection state
+  // Determine color and status text based on connection state
   uint16_t bgColor = COLOR_BG;
-  String statusText = "ROBOTER 9";
+  String statusIcon = "?";
+  String statusName = "UNKNOWN";
 
   if (connState == "OK" || connState == "CONNECTED") {
-    bgColor = COLOR_GOOD;  // Green background
-    statusText = "ROBOTER 9 - LoRa ONLINE";
+    bgColor = COLOR_GOOD;  // Green
+    statusIcon = "✓";
+    statusName = "ONLINE";
   } else if (connState == "WEAK") {
-    bgColor = COLOR_WARN;  // Orange background
-    statusText = "ROBOTER 9 - LoRa WEAK";
+    bgColor = COLOR_WARN;  // Orange
+    statusIcon = "~";
+    statusName = "WEAK";
   } else if (connState == "LOST") {
-    bgColor = COLOR_BAD;   // Red background
-    statusText = "ROBOTER 9 - LoRa OFFLINE";
+    bgColor = COLOR_BAD;   // Red
+    statusIcon = "✗";
+    statusName = "OFFLINE";
+  } else if (connState == "CONNECT") {
+    bgColor = COLOR_LABEL;  // Gray
+    statusIcon = "…";
+    statusName = "CONNECT";
   } else {
-    // UNKNOWN or CONNECTING
-    bgColor = COLOR_LABEL;  // Gray background
-    statusText = "ROBOTER 9 - LoRa " + connState;
+    bgColor = COLOR_LABEL;  // Gray
+    statusIcon = "?";
+    statusName = connState;
   }
 
   // Draw background
   tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, bgColor);
 
-  // Draw status text (centered, no blinking)
-  tft.setTextDatum(MC_DATUM);
+  // Build status bar text with all LoRa information
+  tft.setTextDatum(ML_DATUM);  // Middle-left alignment
   tft.setTextSize(2);
   tft.setTextColor(COLOR_TEXT);
-  tft.drawString(statusText, TFT_WIDTH/2, ALERT_Y + ALERT_H/2);
+
+  // "LoRa:" label
+  int x = 5;
+  int y = ALERT_Y + ALERT_H/2;
+  tft.drawString("LoRa:", x, y);
+  x += tft.textWidth("LoRa:") + 5;
+
+  // Status (ONLINE/OFFLINE/WEAK/etc)
+  tft.drawString(statusName, x, y);
+  x += tft.textWidth(statusName) + 10;
+
+  // RSSI (if available)
+  tft.setTextSize(1);
+  if (rssi.length() > 0) {
+    String rssiText = "RSSI:" + rssi;
+    tft.drawString(rssiText, x, y - 5);
+    x += tft.textWidth(rssiText) + 8;
+  }
+
+  // SNR (if available)
+  if (snr.length() > 0) {
+    String snrText = "SNR:" + snr;
+    tft.drawString(snrText, x, y - 5);
+    x += tft.textWidth(snrText) + 8;
+  }
+
+  // LoRa packet count (if available)
+  if (loraPkts.length() > 0) {
+    String pktsText = "Pkts:" + loraPkts;
+    tft.drawString(pktsText, x, y - 5);
+  }
 }
