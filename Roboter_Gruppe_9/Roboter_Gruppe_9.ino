@@ -101,14 +101,6 @@ void initKillSwitch() {
 void checkKillSwitch() {
   bool pressed = (digitalRead(KILLSWITCH_READ_PIN) == LOW);
 
-  // Debug: Print GPIO state every 2 seconds if debug enabled
-  if (KILLSWITCH_DEBUG && millis() - lastKillSwitchDebug >= 2000) {
-    lastKillSwitchDebug = millis();
-    Serial.print("[KillSwitch Debug] GPIO13: ");
-    Serial.print(digitalRead(KILLSWITCH_READ_PIN));
-    Serial.println(pressed ? " (PRESSED)" : " (released)");
-  }
-
   if (pressed) {
     if (killSwitchPressStart == 0) {
       killSwitchPressStart = millis();
@@ -627,17 +619,18 @@ void handleManualATCommands() {
     command.trim();
 
     if (command.length() > 0) {
-      Serial.println("\n╔════════════════════════════════════╗");
-      Serial.print("║ Manual AT Command: ");
+      Serial.print("\n[AT] >> ");
       Serial.println(command);
-      Serial.println("╚════════════════════════════════════╝");
 
       // Send command directly to LoRa module
       String response = sendLoRaCommand(command, 2000);
 
-      Serial.println("╔════════════════════════════════════╗");
-      Serial.println("║ Command completed");
-      Serial.println("╚════════════════════════════════════╝\n");
+      Serial.print("[AT] << ");
+      if (response.length() > 0) {
+        Serial.println(response);
+      } else {
+        Serial.println("<no response>");
+      }
     }
   }
 }
@@ -652,15 +645,6 @@ void loop() {
   #if ENABLE_MANUAL_AT_COMMANDS
   handleManualATCommands();
   #endif
-
-  // Debug: Confirm loop is running (only first 5 times)
-  static int loopCounter = 0;
-  if (loopCounter < 5) {
-    loopCounter++;
-    Serial.print("✓ Loop running (");
-    Serial.print(loopCounter);
-    Serial.println("/5)");
-  }
 
   // Spinner
   updateSpinner();

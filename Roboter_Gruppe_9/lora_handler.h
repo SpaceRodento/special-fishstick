@@ -49,49 +49,18 @@ inline String sendLoRaCommand(String command, int timeout = 500) {
 
   LoRaSerial.println(command);
 
-  Serial.print("[LoRa TX] ");
-  Serial.println(command);
-
   unsigned long start = millis();
   String response = "";
-  int bytesRead = 0;
 
   while (millis() - start < timeout) {
     if (LoRaSerial.available()) {
       char c = LoRaSerial.read();
       response += c;
-      bytesRead++;
-
-      // Show raw bytes for debugging garbled data
-      #if DEBUG_LORA_AT
-      if (c < 32 || c > 126) {  // Non-printable character
-        Serial.print("<0x");
-        Serial.print(c, HEX);
-        Serial.print(">");
-      }
-      #endif
-
       if (c == '\n' && response.length() > 2) break;
     }
   }
 
   response.trim();
-
-  if (response.length() > 0) {
-    Serial.print("[LoRa RX] ");
-    Serial.println(response);
-  } else {
-    Serial.println("[LoRa RX] <no response>");
-  }
-
-  #if DEBUG_LORA_AT
-  Serial.print("  → Bytes received: ");
-  Serial.print(bytesRead);
-  Serial.print(", Elapsed: ");
-  Serial.print(millis() - start);
-  Serial.println("ms");
-  #endif
-
   return response;
 }
 
@@ -124,129 +93,32 @@ inline void waitForReady(int timeout = 5000) {
   Serial.println("⚠ READY signal timeout (continuing anyway)");
 }
 
-// =============== BAUDRATE AUTO-DETECTION ================================
-inline bool detectBaudrate() {
-  const uint32_t baudrates[] = {115200, 57600, 9600};
-  const int numBaudrates = 3;
-
-  Serial.println("🔍 Auto-detecting LoRa module baudrate...");
-  Serial.println("   Testing common baudrates: 115200, 57600, 9600");
-
-  for (int i = 0; i < numBaudrates; i++) {
-    uint32_t baud = baudrates[i];
-    Serial.print("   [");
-    Serial.print(i + 1);
-    Serial.print("/");
-    Serial.print(numBaudrates);
-    Serial.print("] Testing ");
-    Serial.print(baud);
-    Serial.print(" baud... ");
-
-    // Try this baudrate
-    LoRaSerial.begin(baud, SERIAL_8N1, RXD2, TXD2);
-    delay(200);
-
-    // Clear buffer
-    while (LoRaSerial.available()) LoRaSerial.read();
-    delay(50);
-
-    // Test with AT command
-    LoRaSerial.println("AT");
-
-    String response = "";
-    unsigned long start = millis();
-    while (millis() - start < 500) {
-      if (LoRaSerial.available()) {
-        char c = LoRaSerial.read();
-        response += c;
-      }
-    }
-
-    response.trim();
-
-    // Check for valid response
-    if (response.indexOf("+OK") >= 0 || response.indexOf("OK") >= 0) {
-      Serial.println("✓ SUCCESS!");
-      Serial.print("   Module is communicating at ");
-      Serial.print(baud);
-      Serial.println(" baud");
-
-      // Keep connection open at this baudrate
-      return true;
-    } else {
-      Serial.print("✗ Failed (got: '");
-      if (response.length() > 20) {
-        Serial.print(response.substring(0, 20));
-        Serial.print("...");
-      } else {
-        Serial.print(response);
-      }
-      Serial.println("')");
-
-      LoRaSerial.end();
-      delay(100);
-    }
-  }
-
-  Serial.println("❌ No valid baudrate found!");
-  Serial.println("💡 Module may be:");
-  Serial.println("   - Not powered");
-  Serial.println("   - Wrong TX/RX wiring");
-  Serial.println("   - Using non-standard baudrate");
-  Serial.println("   - Hardware fault");
-  return false;
-}
-
 // =============== INITIALIZE LoRa ================================
 inline bool initLoRa(uint8_t myAddress, uint8_t networkID) {
   Serial.println("\n============================");
-  Serial.println("=== RYLR896 Init ===");
+  Serial.println("=== LoRa Init ===");
   Serial.println("============================");
 
-  #if DEBUG_LORA_AT
-  Serial.println("📡 LoRa Debug Mode: ENABLED");
-  Serial.print("  RX Pin (RYLR896 TX): GPIO ");
-  Serial.println(RXD2);
-  Serial.print("  TX Pin (RYLR896 RX): GPIO ");
-  Serial.println(TXD2);
-  #endif
+  // Start serial connection
+  LoRaSerial.begin(LORA_BAUDRATE, SERIAL_8N1, RXD2, TXD2);
+  delay(1000);
 
-  // Auto-detect baudrate first
-  if (!detectBaudrate()) {
-    return false;
-  }
+  // Clear serial buffer
+  while (LoRaSerial.available()) LoRaSerial.read();
 
-  // LoRaSerial is now open at correct baudrate from detectBaudrate()
-  delay(500);
-
-  Serial.println("📝 Clearing serial buffer...");
-  int cleared = 0;
-  while (LoRaSerial.available()) {
-    LoRaSerial.read();
-    cleared++;
-  }
-  #if DEBUG_LORA_AT
-  Serial.print("  → Cleared ");
-  Serial.print(cleared);
-  Serial.println(" bytes");
-  #endif
-
-  // CRITICAL: Reset module for clean state
-  Serial.println("🔄 Resetting module...");
+  // Reset module
+  Serial.println("Resetting module...");
   String response = sendLoRaCommand("AT+RESET", 2000);
-
-  // Wait for READY signal
   waitForReady(5000);
 
-  // Quick test after reset
-  Serial.println("🔍 Verifying connection after reset...");
+  // Test connection
+  Serial.println("Testing connection...");
   response = sendLoRaCommand("AT", 1500);
   if (response.indexOf("OK") < 0) {
-    Serial.println("⚠️  Warning: Module not responding after reset");
-    Serial.println("   Continuing anyway...");
-  } else {
-    Serial.println("✓ Module responding");
+    Serial.println("❌ Module not responding!");
+    return false;
   }
+  Serial.println("✓ Module responding");
 
   // Get version
   response = sendLoRaCommand("AT+VER?", 1000);
@@ -298,11 +170,10 @@ inline bool sendLoRaMessage(String message, uint8_t targetAddress) {
   String response = sendLoRaCommand(command, 4000);
 
   if (response.indexOf("OK") >= 0) {
-    Serial.print("✓ Sent: ");
-    Serial.println(message);
     return true;
   } else {
-    Serial.println("❌ Send failed!");
+    Serial.print("❌ LoRa send failed: ");
+    Serial.println(message);
     return false;
   }
 }
@@ -331,12 +202,6 @@ inline bool receiveLoRaMessage(DeviceState& remote, String& payload) {
   
   // Check if it's a received message
   if (response.startsWith("+RCV=")) {
-    Serial.println("\n╔════════════════════════");
-    Serial.println("║ LoRa Message Received");
-    Serial.println("╠════════════════════════");
-    Serial.print("║ Raw: ");
-    Serial.println(response);
-
     // Parse: +RCV=sender,length,data,RSSI,SNR
     // NOTE: Data field may contain commas! Use length to parse correctly.
     int start = 5;  // Skip "+RCV="
@@ -364,16 +229,12 @@ inline bool receiveLoRaMessage(DeviceState& remote, String& payload) {
         remote.snr = snrStr.toInt();
         remote.lastMessageTime = millis();  // Update last message timestamp!
 
-        Serial.print("║ From: ");
-        Serial.println(sender);
-        Serial.print("║ Data: ");
-        Serial.println(payload);
-        Serial.print("║ RSSI: ");
+        Serial.print("📥 RX [");
+        Serial.print(payload);
+        Serial.print("] RSSI:");
         Serial.print(remote.rssi);
-        Serial.println(" dBm");
-        Serial.print("║ SNR:  ");
+        Serial.print(" SNR:");
         Serial.println(remote.snr);
-        Serial.println("╚════════════════════════");
 
         return true;
       }
