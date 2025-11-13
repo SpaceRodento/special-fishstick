@@ -604,13 +604,54 @@ void setup() {
     initCurrentMonitor();
   #endif
 
+  #if ENABLE_MANUAL_AT_COMMANDS
+    Serial.println("\n🛠️  Manual AT Commands: ENABLED");
+    Serial.println("   Type AT commands in Serial Monitor to test LoRa module:");
+    Serial.println("   - AT (test connection)");
+    Serial.println("   - AT+VER? (get version)");
+    Serial.println("   - AT+ADDRESS? (get address)");
+    Serial.println("   - AT+NETWORKID? (get network ID)");
+    Serial.println("   - AT+PARAMETER? (get LoRa parameters)");
+    Serial.println("   - AT+RESET (reset module)");
+  #endif
+
   Serial.println("\n✓ Setup complete!\n");
 }
+
+// =============== MANUAL AT COMMAND HANDLER ================================
+#if ENABLE_MANUAL_AT_COMMANDS
+void handleManualATCommands() {
+  // Check if user typed something in Serial Monitor
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+
+    if (command.length() > 0) {
+      Serial.println("\n╔════════════════════════════════════╗");
+      Serial.print("║ Manual AT Command: ");
+      Serial.println(command);
+      Serial.println("╚════════════════════════════════════╝");
+
+      // Send command directly to LoRa module
+      String response = sendLoRaCommand(command, 2000);
+
+      Serial.println("╔════════════════════════════════════╗");
+      Serial.println("║ Command completed");
+      Serial.println("╚════════════════════════════════════╝\n");
+    }
+  }
+}
+#endif
 
 // =============== LOOP ================================
 void loop() {
   // Check kill-switch every loop (highest priority!)
   checkKillSwitch();
+
+  // Manual AT commands (for debugging LoRa module)
+  #if ENABLE_MANUAL_AT_COMMANDS
+  handleManualATCommands();
+  #endif
 
   // Debug: Confirm loop is running (only first 5 times)
   static int loopCounter = 0;

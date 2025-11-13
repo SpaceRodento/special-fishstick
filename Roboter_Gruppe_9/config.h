@@ -45,6 +45,7 @@
 
 // =============== DEBUG ================================
 #define DEBUG_LORA_AT true
+#define ENABLE_MANUAL_AT_COMMANDS true  // Allow sending AT commands from Serial Monitor
 
 // =============== PC DATA LOGGING ================================
 #define ENABLE_CSV_OUTPUT true       // Enable CSV data output for Python logging

@@ -34,6 +34,11 @@ HardwareSerial LoRaSerial(1);
 
 // =============== AT COMMAND FUNCTION ================================
 inline String sendLoRaCommand(String command, int timeout = 500) {
+  // Clear any pending data before sending command
+  while (LoRaSerial.available()) {
+    LoRaSerial.read();
+  }
+
   LoRaSerial.println(command);
 
   Serial.print("[LoRa TX] ");
@@ -41,11 +46,23 @@ inline String sendLoRaCommand(String command, int timeout = 500) {
 
   unsigned long start = millis();
   String response = "";
+  int bytesRead = 0;
 
   while (millis() - start < timeout) {
     if (LoRaSerial.available()) {
       char c = LoRaSerial.read();
       response += c;
+      bytesRead++;
+
+      // Show raw bytes for debugging garbled data
+      #if DEBUG_LORA_AT
+      if (c < 32 || c > 126) {  // Non-printable character
+        Serial.print("<0x");
+        Serial.print(c, HEX);
+        Serial.print(">");
+      }
+      #endif
+
       if (c == '\n' && response.length() > 2) break;
     }
   }
@@ -55,7 +72,17 @@ inline String sendLoRaCommand(String command, int timeout = 500) {
   if (response.length() > 0) {
     Serial.print("[LoRa RX] ");
     Serial.println(response);
+  } else {
+    Serial.println("[LoRa RX] <no response>");
   }
+
+  #if DEBUG_LORA_AT
+  Serial.print("  → Bytes received: ");
+  Serial.print(bytesRead);
+  Serial.print(", Elapsed: ");
+  Serial.print(millis() - start);
+  Serial.println("ms");
+  #endif
 
   return response;
 }
@@ -95,40 +122,83 @@ inline bool initLoRa(uint8_t myAddress, uint8_t networkID) {
   Serial.println("=== RYLR896 Init ===");
   Serial.println("============================");
 
+  #if DEBUG_LORA_AT
+  Serial.println("📡 LoRa Debug Mode: ENABLED");
+  Serial.print("  Baudrate: ");
+  Serial.println(LORA_BAUDRATE);
+  Serial.print("  RX Pin (RYLR896 TX): GPIO ");
+  Serial.println(RXD2);
+  Serial.print("  TX Pin (RYLR896 RX): GPIO ");
+  Serial.println(TXD2);
+  #endif
+
   // Start serial connection
   LoRaSerial.begin(LORA_BAUDRATE, SERIAL_8N1, RXD2, TXD2);
-  delay(500);
+  delay(1000);  // Increased from 500ms to 1000ms
 
-  // Clear any old data
-  while (LoRaSerial.available()) LoRaSerial.read();
+  Serial.println("📝 Clearing serial buffer...");
+  int cleared = 0;
+  while (LoRaSerial.available()) {
+    LoRaSerial.read();
+    cleared++;
+  }
+  #if DEBUG_LORA_AT
+  Serial.print("  → Cleared ");
+  Serial.print(cleared);
+  Serial.println(" bytes");
+  #endif
 
   // CRITICAL: Reset module first!
-  Serial.println("Resetting module...");
-  sendLoRaCommand("AT+RESET", 1000);
+  Serial.println("🔄 Resetting module...");
+  sendLoRaCommand("AT+RESET", 2000);  // Increased timeout to 2000ms
 
   // Wait for READY signal
-  waitForReady(3000);
+  waitForReady(5000);  // Increased from 3000ms to 5000ms
 
-  // Test communication
-  Serial.println("Testing connection...");
-  String response = sendLoRaCommand("AT", 1000);
+  // Test communication with multiple retries
+  Serial.println("🔍 Testing connection...");
+  String response = "";
+  int attempts = 0;
+  bool connected = false;
 
-  // Check for +OK (note the plus sign!)
-  if (response.indexOf("+OK") < 0 && response.indexOf("OK") < 0) {
-    Serial.println("❌ No response from module!");
-    Serial.print("Got: '");
-    Serial.print(response);
-    Serial.println("'");
+  for (attempts = 1; attempts <= 3; attempts++) {
+    Serial.print("  Attempt ");
+    Serial.print(attempts);
+    Serial.print("/3... ");
 
-    // Try one more time
-    Serial.println("Retrying...");
-    delay(500);
-    response = sendLoRaCommand("AT", 1000);
-    if (response.indexOf("OK") < 0) {
-      return false;
+    response = sendLoRaCommand("AT", 1500);  // Increased timeout to 1500ms
+
+    // Check for +OK (note the plus sign!)
+    if (response.indexOf("+OK") >= 0 || response.indexOf("OK") >= 0) {
+      Serial.println("✓ Success!");
+      connected = true;
+      break;
+    } else {
+      Serial.println("✗ Failed");
+      Serial.print("    Got: '");
+      Serial.print(response);
+      Serial.println("'");
+      if (attempts < 3) {
+        Serial.println("    Waiting 1 second before retry...");
+        delay(1000);
+      }
     }
   }
-  Serial.println("✓ Connected");
+
+  if (!connected) {
+    Serial.println("❌ Module not responding after 3 attempts!");
+    Serial.println("💡 Troubleshooting:");
+    Serial.println("   1. Check RYLR896 power (3.3V, NOT 5V!)");
+    Serial.println("   2. Verify TX/RX connections:");
+    Serial.print("      - RYLR896 TX → ESP32 GPIO ");
+    Serial.println(RXD2);
+    Serial.print("      - RYLR896 RX → ESP32 GPIO ");
+    Serial.println(TXD2);
+    Serial.println("   3. Check common GND");
+    Serial.println("   4. Try different baudrate (9600/57600/115200)");
+    return false;
+  }
+  Serial.println("✓ Module responding");
 
   // Get version
   response = sendLoRaCommand("AT+VER?", 1000);
