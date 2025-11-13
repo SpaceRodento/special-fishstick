@@ -17,9 +17,17 @@
 
   LoRa Parameters:
   - Spreading Factor: 12 (maximum range)
-  - Bandwidth: 125kHz
-  - Coding Rate: 4/5
+  - Bandwidth: 125kHz (BW7)
+  - Coding Rate: 4/5 (CR1)
   - Preamble: 4
+
+  SF12 Air Time (BW 125kHz):
+  - 10 bytes: ~1.3 seconds
+  - 20 bytes: ~2.0 seconds
+  - 34 bytes: ~2.6 seconds
+  - 36 bytes: ~2.8 seconds
+  - RYLR896 responds with +OK AFTER transmission completes!
+  - AT+SEND timeout must be > air time (4000ms for safety)
 =======================================================================*/
 
 #ifndef LORA_HANDLER_H
@@ -241,11 +249,14 @@ inline bool initLoRa(uint8_t myAddress, uint8_t networkID) {
 
 // =============== SEND MESSAGE ================================
 inline bool sendLoRaMessage(String message, uint8_t targetAddress) {
-  String command = "AT+SEND=" + String(targetAddress) + "," + 
+  String command = "AT+SEND=" + String(targetAddress) + "," +
                    String(message.length()) + "," + message;
-  
-  String response = sendLoRaCommand(command, 2000);
-  
+
+  // SF12 is VERY slow! Air time for 36 bytes: ~2.8 seconds
+  // Must wait for +OK response AFTER message is transmitted
+  // Increased timeout: 2000ms → 4000ms for SF12 reliability
+  String response = sendLoRaCommand(command, 4000);
+
   if (response.indexOf("OK") >= 0) {
     Serial.print("✓ Sent: ");
     Serial.println(message);
