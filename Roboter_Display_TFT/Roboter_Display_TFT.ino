@@ -45,10 +45,11 @@
 #include "display_config.h"
 
 // =============== UART CONFIGURATION ================================
+// ⚠️  CRITICAL: ESP32-2432S022 physical RX connector uses UART0 (GPIO 3)!
+// The 4-pin physical connector is hardwired to UART0, not configurable
 #define UART_BAUDRATE 115200
-#define UART_RX_PIN 18                  // Display RX ← Main TX
-#define UART_TX_PIN 19                  // Display TX (not used)
-#define MAX_MESSAGE_LENGTH 256
+// NOTE: Using Serial (UART0), not HardwareSerial(1)
+// Physical pins: RX = GPIO 3, TX = GPIO 1 (hardwired on board)
 
 // =============== DISPLAY CONFIGURATION ================================
 // Landscape mode: 320x240 (rotated from 240x320)
@@ -58,7 +59,7 @@
 #define BACKLIGHT_BRIGHTNESS 200        // 0-255
 
 // =============== UPDATE INTERVALS ================================
-#define DISPLAY_UPDATE_INTERVAL 100     // Update display every 100ms
+#define DISPLAY_UPDATE_INTERVAL 500     // Update display every 500ms (reduced from 100ms to avoid flicker)
 #define DATA_TIMEOUT 5000               // No data timeout (5s)
 
 // =============== COLORS ================================
@@ -74,7 +75,7 @@
 
 // =============== GLOBAL OBJECTS ================================
 static LGFX tft;
-HardwareSerial DataSerial(1);  // Use UART1 for data
+// ⚠️  Use Serial (UART0) for physical RX connector, not HardwareSerial(1)!
 
 // =============== DATA STORAGE ================================
 #define MAX_FIELDS 20
@@ -92,6 +93,9 @@ unsigned long lastDataTime = 0;
 unsigned long packetsReceived = 0;
 String alertMessage = "";
 bool alertActive = false;
+
+// LoRa connection status (extracted from incoming data)
+String loraConnectionState = "UNKNOWN";  // OK, WEAK, LOST, UNKNOWN
 
 // =============== DISPLAY REGIONS (Landscape 320x240) ===============
 #define HEADER_Y 0
@@ -113,11 +117,17 @@ void clearAllFields();
 
 // =============== SETUP ================================
 void setup() {
-  Serial.begin(115200);
+  // ⚠️  Initialize Serial FIRST (used for both USB debug and physical RX)
+  // Physical RX connector on ESP32-2432S022 is hardwired to UART0 (GPIO 3)
+  Serial.begin(UART_BAUDRATE);
+  delay(100);
+
   Serial.println("\n\n╔════════════════════════════════════════╗");
   Serial.println("║  ROBOTER GRUPPE 9 - DISPLAY STATION   ║");
-  Serial.println("║  ESP32-2432S022 TFT (Landscape)       ║");
+  Serial.println("║  ESP32-2432S022 TFT (UART0/GPIO3)     ║");
   Serial.println("╚════════════════════════════════════════╝\n");
+  Serial.println("⚠️  NOTE: Serial Monitor may show mixed data");
+  Serial.println("   (Both USB debug + incoming UART data)\n");
 
   // Initialize backlight
   pinMode(BACKLIGHT_PIN, OUTPUT);
@@ -139,14 +149,12 @@ void setup() {
   tft.drawString("Waiting for data...", TFT_WIDTH/2, TFT_HEIGHT/2 + 30);
   delay(2000);
 
-  // Initialize UART
-  Serial.println("📡 Initializing UART...");
-  DataSerial.begin(UART_BAUDRATE, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
+  // UART is already initialized (Serial.begin() at top of setup)
+  // Physical RX connector uses UART0 (GPIO 3), no need for separate init
+  Serial.println("📡 UART ready (physical RX on GPIO 3)");
   Serial.print("  Baudrate: ");
   Serial.println(UART_BAUDRATE);
-  Serial.print("  RX Pin: GPIO ");
-  Serial.println(UART_RX_PIN);
-  Serial.println("  Waiting for data on UART...");
+  Serial.println("  Waiting for data from Robot ESP32...");
 
   // Clear display and show initial layout
   tft.fillScreen(COLOR_BG);
@@ -160,9 +168,9 @@ void setup() {
 void loop() {
   static unsigned long lastUpdate = 0;
 
-  // Read UART data
-  if (DataSerial.available()) {
-    String message = DataSerial.readStringUntil('\n');
+  // Read UART data from Serial (UART0, physical RX GPIO 3)
+  if (Serial.available()) {
+    String message = Serial.readStringUntil('\n');
     message.trim();
 
     if (message.length() > 0) {
@@ -170,6 +178,8 @@ void loop() {
       lastDataTime = millis();
       dataConnected = true;
 
+      // Note: This will also print to USB Serial Monitor
+      // (mixed with debug messages)
       Serial.print("📥 RX [");
       Serial.print(packetsReceived);
       Serial.print("]: ");
@@ -294,21 +304,30 @@ void drawHeader() {
   tft.setTextColor(COLOR_TEXT);
   tft.drawString("ROBOTER 9", 5, HEADER_Y + 7);
 
-  // Connection status
+  // TFT (UART) Connection indicator (top right)
   tft.setTextDatum(TR_DATUM);
   tft.setTextSize(1);
   if (dataConnected) {
     tft.setTextColor(COLOR_GOOD);
-    tft.drawString("ONLINE", TFT_WIDTH - 5, HEADER_Y + 5);
+    tft.drawString("TFT (UART) ON", TFT_WIDTH - 5, HEADER_Y + 3);
   } else {
     tft.setTextColor(COLOR_BAD);
-    tft.drawString("NO DATA", TFT_WIDTH - 5, HEADER_Y + 5);
+    tft.drawString("TFT (UART) OFF", TFT_WIDTH - 5, HEADER_Y + 3);
   }
 
-  // Packet counter
+  // Data status (below UART indicator)
+  if (dataConnected) {
+    tft.setTextColor(COLOR_GOOD);
+    tft.drawString("DATA ONLINE", TFT_WIDTH - 5, HEADER_Y + 13);
+  } else {
+    tft.setTextColor(COLOR_LABEL);
+    tft.drawString("WAITING", TFT_WIDTH - 5, HEADER_Y + 13);
+  }
+
+  // Packet counter (bottom right)
   tft.setTextColor(COLOR_LABEL);
   String pktStr = "PKT:" + String(packetsReceived);
-  tft.drawString(pktStr, TFT_WIDTH - 5, HEADER_Y + 18);
+  tft.drawString(pktStr, TFT_WIDTH - 5, HEADER_Y + 23);
 }
 
 void drawData() {
@@ -355,29 +374,41 @@ void drawData() {
 }
 
 void drawAlert() {
-  if (alertActive && alertMessage.length() > 0) {
-    // Alert background (red)
-    tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, COLOR_ALERT_BG);
-
-    // Alert text (white, centered, blinking effect)
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(2);
-    tft.setTextColor(COLOR_ALERT_TEXT);
-
-    // Blink effect
-    if ((millis() / 500) % 2 == 0) {
-      tft.drawString(">>> " + alertMessage, TFT_WIDTH/2, ALERT_Y + ALERT_H/2);
-    }
-  } else {
-    // Clear alert area
-    tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, COLOR_BG);
-
-    // Show uptime instead
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR_LABEL);
-    unsigned long uptime = millis() / 1000;
-    String uptimeStr = "Uptime: " + String(uptime) + "s";
-    tft.drawString(uptimeStr, TFT_WIDTH/2, ALERT_Y + ALERT_H/2);
+  // Show LoRa connection status (replaces old alert system)
+  // Extract ConnState from fields (set by parseMessage)
+  String connState = getFieldValue("ConnState");
+  if (connState.length() == 0) {
+    connState = loraConnectionState;  // Use global if not in fields
   }
+
+  // Update global state
+  loraConnectionState = connState;
+
+  // Determine color and text based on connection state
+  uint16_t bgColor = COLOR_BG;
+  String statusText = "ROBOTER 9";
+
+  if (connState == "OK" || connState == "CONNECTED") {
+    bgColor = COLOR_GOOD;  // Green background
+    statusText = "ROBOTER 9 - LoRa ONLINE";
+  } else if (connState == "WEAK") {
+    bgColor = COLOR_WARN;  // Orange background
+    statusText = "ROBOTER 9 - LoRa WEAK";
+  } else if (connState == "LOST") {
+    bgColor = COLOR_BAD;   // Red background
+    statusText = "ROBOTER 9 - LoRa OFFLINE";
+  } else {
+    // UNKNOWN or CONNECTING
+    bgColor = COLOR_LABEL;  // Gray background
+    statusText = "ROBOTER 9 - LoRa " + connState;
+  }
+
+  // Draw background
+  tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, bgColor);
+
+  // Draw status text (centered, no blinking)
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_TEXT);
+  tft.drawString(statusText, TFT_WIDTH/2, ALERT_Y + ALERT_H/2);
 }
