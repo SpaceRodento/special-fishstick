@@ -45,10 +45,11 @@
 #include "display_config.h"
 
 // =============== UART CONFIGURATION ================================
+// ⚠️  CRITICAL: ESP32-2432S022 physical RX connector uses UART0 (GPIO 3)!
+// The 4-pin physical connector is hardwired to UART0, not configurable
 #define UART_BAUDRATE 115200
-#define UART_RX_PIN 18                  // Display RX ← Main TX
-#define UART_TX_PIN 19                  // Display TX (not used)
-#define MAX_MESSAGE_LENGTH 256
+// NOTE: Using Serial (UART0), not HardwareSerial(1)
+// Physical pins: RX = GPIO 3, TX = GPIO 1 (hardwired on board)
 
 // =============== DISPLAY CONFIGURATION ================================
 // Landscape mode: 320x240 (rotated from 240x320)
@@ -74,7 +75,7 @@
 
 // =============== GLOBAL OBJECTS ================================
 static LGFX tft;
-HardwareSerial DataSerial(1);  // Use UART1 for data
+// ⚠️  Use Serial (UART0) for physical RX connector, not HardwareSerial(1)!
 
 // =============== DATA STORAGE ================================
 #define MAX_FIELDS 20
@@ -113,11 +114,17 @@ void clearAllFields();
 
 // =============== SETUP ================================
 void setup() {
-  Serial.begin(115200);
+  // ⚠️  Initialize Serial FIRST (used for both USB debug and physical RX)
+  // Physical RX connector on ESP32-2432S022 is hardwired to UART0 (GPIO 3)
+  Serial.begin(UART_BAUDRATE);
+  delay(100);
+
   Serial.println("\n\n╔════════════════════════════════════════╗");
   Serial.println("║  ROBOTER GRUPPE 9 - DISPLAY STATION   ║");
-  Serial.println("║  ESP32-2432S022 TFT (Landscape)       ║");
+  Serial.println("║  ESP32-2432S022 TFT (UART0/GPIO3)     ║");
   Serial.println("╚════════════════════════════════════════╝\n");
+  Serial.println("⚠️  NOTE: Serial Monitor may show mixed data");
+  Serial.println("   (Both USB debug + incoming UART data)\n");
 
   // Initialize backlight
   pinMode(BACKLIGHT_PIN, OUTPUT);
@@ -139,14 +146,12 @@ void setup() {
   tft.drawString("Waiting for data...", TFT_WIDTH/2, TFT_HEIGHT/2 + 30);
   delay(2000);
 
-  // Initialize UART
-  Serial.println("📡 Initializing UART...");
-  DataSerial.begin(UART_BAUDRATE, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
+  // UART is already initialized (Serial.begin() at top of setup)
+  // Physical RX connector uses UART0 (GPIO 3), no need for separate init
+  Serial.println("📡 UART ready (physical RX on GPIO 3)");
   Serial.print("  Baudrate: ");
   Serial.println(UART_BAUDRATE);
-  Serial.print("  RX Pin: GPIO ");
-  Serial.println(UART_RX_PIN);
-  Serial.println("  Waiting for data on UART...");
+  Serial.println("  Waiting for data from Robot ESP32...");
 
   // Clear display and show initial layout
   tft.fillScreen(COLOR_BG);
@@ -160,9 +165,9 @@ void setup() {
 void loop() {
   static unsigned long lastUpdate = 0;
 
-  // Read UART data
-  if (DataSerial.available()) {
-    String message = DataSerial.readStringUntil('\n');
+  // Read UART data from Serial (UART0, physical RX GPIO 3)
+  if (Serial.available()) {
+    String message = Serial.readStringUntil('\n');
     message.trim();
 
     if (message.length() > 0) {
@@ -170,6 +175,8 @@ void loop() {
       lastDataTime = millis();
       dataConnected = true;
 
+      // Note: This will also print to USB Serial Monitor
+      // (mixed with debug messages)
       Serial.print("📥 RX [");
       Serial.print(packetsReceived);
       Serial.print("]: ");
@@ -294,21 +301,25 @@ void drawHeader() {
   tft.setTextColor(COLOR_TEXT);
   tft.drawString("ROBOTER 9", 5, HEADER_Y + 7);
 
-  // Connection status
+  // UART Connection indicator (top right)
   tft.setTextDatum(TR_DATUM);
   tft.setTextSize(1);
+  tft.setTextColor(COLOR_GOOD);  // Always green (UART is always connected)
+  tft.drawString("UART", TFT_WIDTH - 5, HEADER_Y + 3);
+
+  // Data status (below UART indicator)
   if (dataConnected) {
     tft.setTextColor(COLOR_GOOD);
-    tft.drawString("ONLINE", TFT_WIDTH - 5, HEADER_Y + 5);
+    tft.drawString("ONLINE", TFT_WIDTH - 5, HEADER_Y + 13);
   } else {
     tft.setTextColor(COLOR_BAD);
-    tft.drawString("NO DATA", TFT_WIDTH - 5, HEADER_Y + 5);
+    tft.drawString("NO DATA", TFT_WIDTH - 5, HEADER_Y + 13);
   }
 
-  // Packet counter
+  // Packet counter (bottom right)
   tft.setTextColor(COLOR_LABEL);
   String pktStr = "PKT:" + String(packetsReceived);
-  tft.drawString(pktStr, TFT_WIDTH - 5, HEADER_Y + 18);
+  tft.drawString(pktStr, TFT_WIDTH - 5, HEADER_Y + 23);
 }
 
 void drawData() {
