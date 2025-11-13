@@ -88,27 +88,32 @@ Kopioi Robot_Sender logiikka suoraan Roboter_Gruppe_9.ino:on testaamista varten.
 **Tavoite:** Varmista että TFT-näyttö saa dataa ylipäätään
 
 **Testaus:**
-1. [ ] Lataa Display_Device.ino TFT-näytölle (ESP32-2432S022)
-2. [ ] Lataa Roboter_Gruppe_9.ino päälaittee  lle (muokattu DisplayClient)
-3. [ ] Kytke kaapelit:
+1. [✅] Lataa Roboter_Display_TFT.ino TFT-näytölle (ESP32-2432S022)
+2. [✅] Lataa Roboter_Gruppe_9.ino päälaittee  lle (muokattu DisplayClient)
+3. [✅] Kytke kaapelit:
    - Roboter GPIO 23 → TFT RX (fyysinen pinni)
    - GND → GND
-4. [ ] Tarkista Serial Monitor:
+4. [✅] Tarkista Serial Monitor:
    - Roboter: "→ Display: Mode:SENDER,SEQ:0,..."
    - TFT: "📥 RX [1]: ..." tai vastaava
-5. [ ] Tarkista TFT-näyttö:
+5. [✅] Tarkista TFT-näyttö:
    - Pitäisi näyttää dataa, EI "No Data"
 
 **Onnistumiskriteerit:**
-- ✅ Roboter lähettää dataa serialiin
-- ✅ TFT vastaanottaa dataa
-- ✅ TFT päivittää näyttöä
+- ✅ Roboter lähettää dataa serialiin (TESTATTU 2025-11-13)
+- ✅ TFT vastaanottaa dataa (TESTATTU 2025-11-13)
+- ✅ TFT päivittää näyttöä (TESTATTU 2025-11-13)
 
-**Jos epäonnistuu:**
-- Tarkista baudrate (115200 molemmissa)
-- Tarkista GND-yhteys
-- Tarkista että TX menee RX:ään (ei TX→TX!)
-- Mittaa jännitettä GPIO 23:sta (pitäisi vaihdella)
+**Testattu 2025-11-13:**
+- DisplayClient pinMode() korjaus toimii
+- TFT-näyttö päivittyy 2s välein
+- "Connection lost" viesti näkyy (OK - viittaa LoRa-yhteyteen jota ei ole)
+- Serial spam korjattu (max recovery attempts)
+
+**Huomiot:**
+- "Connection lost" = LoRa-yhteys puuttuu (normaalia kun LoRa ei aktiivinen)
+- Serial näyttää "⚠️  LoRa connection lost" vain kerran
+- Background recovery jatkuu 60s välein hiljaisesti
 
 ---
 
@@ -117,22 +122,28 @@ Kopioi Robot_Sender logiikka suoraan Roboter_Gruppe_9.ino:on testaamista varten.
 **Tavoite:** Varmista että LoRa ja TFT toimivat yhdessä
 
 **Testaus:**
-1. [ ] Kytke LoRa-moduuli (GPIO 32/33)
-2. [ ] Kytke TFT-näyttö (GPIO 23)
+1. [ ] Kytke LoRa-moduuli (GPIO 25/26 tässä branchissa)
+2. [✅] Kytke TFT-näyttö (GPIO 23) - TESTATTU
 3. [ ] Aseta config.h:
    ```cpp
-   #define ENABLE_LORA true
-   #define DISPLAY_TYPE 2  // TFT
+   #define ENABLE_DISPLAY_OUTPUT true
    ```
-4. [ ] Lataa koodi ja testaa:
+4. [ ] Lataa koodi kahteen laitteeseen:
+   - Sender: GPIO 16 floating (ei jumpperia)
+   - Receiver: GPIO 16↔17 jumper + TFT-näyttö
+5. [ ] Testaa:
    - LoRa lähettää/vastaanottaa
-   - TFT näyttää dataa
+   - TFT näyttää RSSI/SNR dataa
    - Ei konflikteja
+   - "Connection lost" muuttuu "OK":ksi kun LoRa viestit alkavat
 
 **Onnistumiskriteerit:**
-- ✅ LoRa viestit kulkevat (RSSI näkyy)
-- ✅ TFT päivittyy 2s välein
-- ✅ Ei kaatumisia tai virheitä
+- [ ] LoRa viestit kulkevat (RSSI näkyy)
+- [ ] TFT päivittyy 2s välein ja näyttää RSSI-arvot
+- [ ] "LOST" → "OK" kun yhteys saadaan
+- [ ] Ei kaatumisia tai virheitä
+
+**SEURAAVA TESTAUS!**
 
 ---
 

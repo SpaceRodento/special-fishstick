@@ -78,6 +78,7 @@ struct HealthMonitor {
   // Recovery attempts
   int recoveryAttempts;
   unsigned long lastRecoveryAttempt;
+  bool maxAttemptsReachedNotified;  // Track if we've already notified about max attempts
 
   // Uptime
   unsigned long startTime;

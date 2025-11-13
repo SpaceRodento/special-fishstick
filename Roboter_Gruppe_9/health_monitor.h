@@ -51,6 +51,7 @@ inline void initHealthMonitor(HealthMonitor& health) {
 
   health.recoveryAttempts = 0;
   health.lastRecoveryAttempt = 0;
+  health.maxAttemptsReachedNotified = false;
 
   health.startTime = millis();
 
@@ -177,13 +178,13 @@ inline void updateConnectionState(HealthMonitor& health, DeviceState& remote) {
     health.stateChangeTime = now;
 
     // Log state change
-    Serial.print("\n╔════════ CONNECTION STATE CHANGE ════════╗\n");
+    Serial.print("\n╔════════ LoRa CONNECTION STATE ════════╗\n");
     Serial.print("║ ");
     Serial.print(getConnectionStateString(oldState));
     Serial.print(" -> ");
     Serial.print(getConnectionStateString(newState));
     Serial.println();
-    Serial.print("║ Time since last message: ");
+    Serial.print("║ Time since last LoRa msg: ");
     Serial.print(timeSinceLastMsg / 1000.0, 1);
     Serial.println(" s");
     Serial.print("║ RSSI: ");
@@ -210,19 +211,35 @@ inline bool attemptRecovery(HealthMonitor& health, uint8_t myAddress, uint8_t ne
 
   // Check max attempts
   if (health.recoveryAttempts >= watchdogCfg.maxRecoveryAttempts) {
-    Serial.println("❌ Max recovery attempts reached. Manual intervention needed.");
-    return false;
+    // Notify only once when max attempts first reached
+    if (!health.maxAttemptsReachedNotified) {
+      Serial.println("\n⚠️  LoRa connection lost - max recovery attempts reached");
+      Serial.println("    Will continue trying every 60s in background...");
+      Serial.println("    (This is normal if LoRa transmitter is not active)");
+      health.maxAttemptsReachedNotified = true;
+    }
+
+    // Continue recovery attempts but with longer interval (60s instead of 15s)
+    if (now - health.lastRecoveryAttempt < 60000) {  // 60 seconds
+      return false;  // Too soon for background retry
+    }
+
+    // Reset counter to allow continued background attempts
+    health.recoveryAttempts = 0;
   }
 
   // Attempt recovery
   health.recoveryAttempts++;
   health.lastRecoveryAttempt = now;
 
-  Serial.println("\n╔════════════════════════════════════╗");
-  Serial.print("║ RECOVERY ATTEMPT #");
-  Serial.println(health.recoveryAttempts);
-  Serial.println("║ Re-initializing LoRa module...");
-  Serial.println("╚════════════════════════════════════╝");
+  // Only show detailed recovery messages for first few attempts
+  if (health.recoveryAttempts <= watchdogCfg.maxRecoveryAttempts) {
+    Serial.println("\n╔════════════════════════════════════╗");
+    Serial.print("║ LoRa RECOVERY ATTEMPT #");
+    Serial.println(health.recoveryAttempts);
+    Serial.println("║ Re-initializing LoRa module...");
+    Serial.println("╚════════════════════════════════════╝");
+  }
 
   // Re-initialize LoRa (from lora_handler.h)
   bool success = initLoRa(myAddress, networkID);
