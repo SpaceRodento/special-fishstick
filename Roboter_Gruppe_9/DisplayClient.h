@@ -57,9 +57,15 @@ public:
    * Initialize serial connection to display
    */
   void begin() {
-    // UART begin() handles pin configuration automatically
-    // DO NOT call pinMode() before serial->begin() - it prevents UART from taking control!
+    // ✅ CRITICAL FIX: Set pinMode() BEFORE serial->begin()
+    // Required when using &Serial2 with custom pins (GPIO 23)
+    // Based on working Robot_Sender.ino implementation
+    pinMode(txPin, OUTPUT);
+    if (rxPin != -1) {
+      pinMode(rxPin, INPUT);
+    }
 
+    // Initialize UART with custom pins
     if (rxPin == -1) {
       // TX only mode (most common)
       serial->begin(baudrate, SERIAL_8N1, -1, txPin);
