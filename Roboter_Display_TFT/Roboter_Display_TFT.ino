@@ -59,7 +59,7 @@
 #define BACKLIGHT_BRIGHTNESS 200        // 0-255
 
 // =============== UPDATE INTERVALS ================================
-#define DISPLAY_UPDATE_INTERVAL 100     // Update display every 100ms
+#define DISPLAY_UPDATE_INTERVAL 500     // Update display every 500ms (reduced from 100ms to avoid flicker)
 #define DATA_TIMEOUT 5000               // No data timeout (5s)
 
 // =============== COLORS ================================
@@ -93,6 +93,9 @@ unsigned long lastDataTime = 0;
 unsigned long packetsReceived = 0;
 String alertMessage = "";
 bool alertActive = false;
+
+// LoRa connection status (extracted from incoming data)
+String loraConnectionState = "UNKNOWN";  // OK, WEAK, LOST, UNKNOWN
 
 // =============== DISPLAY REGIONS (Landscape 320x240) ===============
 #define HEADER_Y 0
@@ -301,19 +304,24 @@ void drawHeader() {
   tft.setTextColor(COLOR_TEXT);
   tft.drawString("ROBOTER 9", 5, HEADER_Y + 7);
 
-  // UART Connection indicator (top right)
+  // TFT (UART) Connection indicator (top right)
   tft.setTextDatum(TR_DATUM);
   tft.setTextSize(1);
-  tft.setTextColor(COLOR_GOOD);  // Always green (UART is always connected)
-  tft.drawString("UART", TFT_WIDTH - 5, HEADER_Y + 3);
+  if (dataConnected) {
+    tft.setTextColor(COLOR_GOOD);
+    tft.drawString("TFT (UART) ON", TFT_WIDTH - 5, HEADER_Y + 3);
+  } else {
+    tft.setTextColor(COLOR_BAD);
+    tft.drawString("TFT (UART) OFF", TFT_WIDTH - 5, HEADER_Y + 3);
+  }
 
   // Data status (below UART indicator)
   if (dataConnected) {
     tft.setTextColor(COLOR_GOOD);
-    tft.drawString("ONLINE", TFT_WIDTH - 5, HEADER_Y + 13);
+    tft.drawString("DATA ONLINE", TFT_WIDTH - 5, HEADER_Y + 13);
   } else {
-    tft.setTextColor(COLOR_BAD);
-    tft.drawString("NO DATA", TFT_WIDTH - 5, HEADER_Y + 13);
+    tft.setTextColor(COLOR_LABEL);
+    tft.drawString("WAITING", TFT_WIDTH - 5, HEADER_Y + 13);
   }
 
   // Packet counter (bottom right)
@@ -366,29 +374,41 @@ void drawData() {
 }
 
 void drawAlert() {
-  if (alertActive && alertMessage.length() > 0) {
-    // Alert background (red)
-    tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, COLOR_ALERT_BG);
-
-    // Alert text (white, centered, blinking effect)
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(2);
-    tft.setTextColor(COLOR_ALERT_TEXT);
-
-    // Blink effect
-    if ((millis() / 500) % 2 == 0) {
-      tft.drawString(">>> " + alertMessage, TFT_WIDTH/2, ALERT_Y + ALERT_H/2);
-    }
-  } else {
-    // Clear alert area
-    tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, COLOR_BG);
-
-    // Show uptime instead
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextSize(1);
-    tft.setTextColor(COLOR_LABEL);
-    unsigned long uptime = millis() / 1000;
-    String uptimeStr = "Uptime: " + String(uptime) + "s";
-    tft.drawString(uptimeStr, TFT_WIDTH/2, ALERT_Y + ALERT_H/2);
+  // Show LoRa connection status (replaces old alert system)
+  // Extract ConnState from fields (set by parseMessage)
+  String connState = getFieldValue("ConnState");
+  if (connState.length() == 0) {
+    connState = loraConnectionState;  // Use global if not in fields
   }
+
+  // Update global state
+  loraConnectionState = connState;
+
+  // Determine color and text based on connection state
+  uint16_t bgColor = COLOR_BG;
+  String statusText = "ROBOTER 9";
+
+  if (connState == "OK" || connState == "CONNECTED") {
+    bgColor = COLOR_GOOD;  // Green background
+    statusText = "ROBOTER 9 - LoRa ONLINE";
+  } else if (connState == "WEAK") {
+    bgColor = COLOR_WARN;  // Orange background
+    statusText = "ROBOTER 9 - LoRa WEAK";
+  } else if (connState == "LOST") {
+    bgColor = COLOR_BAD;   // Red background
+    statusText = "ROBOTER 9 - LoRa OFFLINE";
+  } else {
+    // UNKNOWN or CONNECTING
+    bgColor = COLOR_LABEL;  // Gray background
+    statusText = "ROBOTER 9 - LoRa " + connState;
+  }
+
+  // Draw background
+  tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, bgColor);
+
+  // Draw status text (centered, no blinking)
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_TEXT);
+  tft.drawString(statusText, TFT_WIDTH/2, ALERT_Y + ALERT_H/2);
 }

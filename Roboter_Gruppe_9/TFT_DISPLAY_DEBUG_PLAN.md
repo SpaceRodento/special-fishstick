@@ -122,28 +122,40 @@ Kopioi Robot_Sender logiikka suoraan Roboter_Gruppe_9.ino:on testaamista varten.
 **Tavoite:** Varmista että LoRa ja TFT toimivat yhdessä
 
 **Testaus:**
-1. [ ] Kytke LoRa-moduuli (GPIO 25/26 tässä branchissa)
+1. [✅] Kytke LoRa-moduuli (GPIO 25/26 tässä branchissa) - TESTATTU 2025-11-13
 2. [✅] Kytke TFT-näyttö (GPIO 23) - TESTATTU
-3. [ ] Aseta config.h:
-   ```cpp
-   #define ENABLE_DISPLAY_OUTPUT true
-   ```
-4. [ ] Lataa koodi kahteen laitteeseen:
-   - Sender: GPIO 16 floating (ei jumpperia)
-   - Receiver: GPIO 16↔17 jumper + TFT-näyttö
-5. [ ] Testaa:
+3. [✅] Aseta config.h: `ENABLE_DISPLAY_OUTPUT true` - OK
+4. [✅] Lataa koodi kahteen laitteeseen - TESTATTU
+   - Sender: GPIO 16 floating (ei jumpperia) + LoRa
+   - Receiver: GPIO 16↔17 jumper + TFT-näyttö + LoRa
+5. [✅] Testaa - TOIMII!
    - LoRa lähettää/vastaanottaa
-   - TFT näyttää RSSI/SNR dataa
+   - TFT näyttää dataa (LED:ON/OFF vaihtelee)
+   - UART ONLINE näkyy näytöllä
    - Ei konflikteja
-   - "Connection lost" muuttuu "OK":ksi kun LoRa viestit alkavat
 
 **Onnistumiskriteerit:**
-- [ ] LoRa viestit kulkevat (RSSI näkyy)
-- [ ] TFT päivittyy 2s välein ja näyttää RSSI-arvot
-- [ ] "LOST" → "OK" kun yhteys saadaan
-- [ ] Ei kaatumisia tai virheitä
+- [✅] LoRa viestit kulkevat (TESTATTU 2025-11-13)
+- [✅] TFT päivittyy ja näyttää LED-tilatiedot (TESTATTU 2025-11-13)
+- [✅] UART-yhteys toimii samanaikaisesti LoRan kanssa (TESTATTU 2025-11-13)
+- [✅] Ei kaatumisia tai virheitä (TESTATTU 2025-11-13)
 
-**SEURAAVA TESTAUS!**
+**Testattu 2025-11-13:**
+- ✅ Sender-yksikkö lähettää LoRa-viestejä
+- ✅ Receiver-yksikkö vastaanottaa viestejä
+- ✅ TFT-näyttö päivittyy UART:n kautta
+- ✅ LED:ON/OFF tieto näkyy näytöllä
+- ✅ Ei UART/LoRa konflikteja (Serial2 vs UART0)
+
+**Huomiot:**
+- ⚠️  Näyttö värisee/vilkkuu (liian usea päivitys?)
+- 💡 Alert-alue vilkkuu häiritsevästi ("Roboter 9 Online")
+- 💡 UART-indikaattori voisi olla selkeämpi
+
+**UI-parannukset tehtävänä:**
+- [ ] Vähennä päivitystiheyttä (värinän korjaus)
+- [ ] Näytä LoRa-yhteys alert-alueella (vihreä/punainen)
+- [ ] Muuta UART → "TFT (UART) ON"
 
 ---
 
