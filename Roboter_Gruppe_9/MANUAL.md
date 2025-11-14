@@ -1,0 +1,612 @@
+# Roboter Gruppe 9 - Manual
+
+**LoRa Communication System with TFT Display**
+
+ESP32-based LoRa wireless communication with automatic role detection, real-time TFT display, and comprehensive signal monitoring.
+
+Last updated: 2025-11-14
+
+---
+
+## 📖 Sisällysluettelo
+
+1. [Projektin Yleiskatsaus](#projektin-yleiskatsaus)
+2. [Laitteisto](#laitteisto)
+3. [Pikaohje](#pikaohje)
+4. [Ohjelmiston Rakenne](#ohjelmiston-rakenne)
+5. [Konfigurointi](#konfigurointi)
+6. [LoRa-asetukset](#lora-asetukset)
+7. [TFT-näyttö](#tft-näyttö)
+8. [PC-datan Tallennus](#pc-datan-tallennus)
+9. [Vianmääritys](#vianmääritys)
+
+---
+
+## Projektin Yleiskatsaus
+
+### Mikä tämä on?
+
+Täysi langaton kommunikaatiojärjestelmä kahdelle ESP32-mikrokontrollerille LoRa-radioteknologialla. Kommunikaatioetäisyys jopa useita kilometrejä.
+
+**Pääominaisuudet:**
+- **Plug-and-play** - Identtinen koodi molempiin laitteisiin, rooli tunnistetaan automaattisesti
+- **TFT-näyttö** - Erillinen 320x240 värinäyttö (ESP32-2432S022)
+- **Kaksisuuntainen** - Molemmat laitteet lähettävät ja vastaanottavat (ACK-tuki)
+- **Itseparantuva** - Automaattinen palautuminen yhteysvirheistä
+- **Signaalin seuranta** - Reaaliaikainen RSSI, SNR, pakettihäviö
+- **Kill-switch** - Fyysinen ja etä-hätäpysäytys
+- **Datan tallennus** - Python-skriptit PC:lle
+
+**Käyttökohteet:**
+- Robotin etäohjaus telemetrialla
+- Ympäristön sensorit (lämpötila, kosteus)
+- Rakennusautomaatio
+- Maatalouden seuranta
+- Etälaitteiden ohjaus
+
+---
+
+## Laitteisto
+
+### Tarvittavat Komponentit
+
+**Perusjärjestelmä (2 kpl ESP32):**
+- 2× ESP32 DevKit v1
+- 2× RYLR896 LoRa-moduuli (868 MHz)
+- Hyppylankalanka (roolivalinta)
+- USB-kaapelit
+
+**TFT-näyttöasema (valinnainen):**
+- 1× ESP32-2432S022 (2.4" TFT 320x240)
+- 2 johtoa (TX, GND) + oma USB-virtalähde
+
+**Lisäanturit (valinnaiset):**
+- I2C LCD 16x2 (vastaanottajalle)
+- Jännitejakaja (akkuseuranta)
+- MAX4466 mikrofoni (äänentunnistus)
+- TCS34725 värisensori (valontunnistus)
+- INA219 virtamittari
+
+### Kytkennät
+
+#### RYLR896 LoRa-moduuli
+```
+RYLR896 → ESP32
+─────────────────
+TX      → GPIO 25 (RXD2)
+RX      → GPIO 26 (TXD2)
+VCC     → 3.3V
+GND     → GND
+```
+
+#### Roolivalinta (Mode Detection)
+```
+GPIO 17 → Asetetaan OUTPUT LOW (tarjoaa GND)
+GPIO 16 → Luetaan INPUT_PULLUP:lla
+
+VASTAANOTTAJA: Yhdistä GPIO 16 ↔ GPIO 17 hyppylangalla
+LÄHETTÄJÄ:     Jätä GPIO 16 irti (ei yhteyttä)
+
+Huom: GPIO 16 ja 17 ovat vierekkäin!
+```
+
+#### Kill-Switch
+```
+GPIO 14 → Asetetaan OUTPUT LOW (tarjoaa GND)
+GPIO 13 → Luetaan INPUT_PULLUP:lla
+
+Uudelleenkäynnistys: Yhdistä GPIO 13 ↔ GPIO 14 ja pidä 3 sekuntia
+```
+
+#### TFT-näyttöasema
+```
+Robot ESP32          →  Display ESP32-2432S022
+──────────────────────────────────────────────
+GPIO 23 (TX)         →  GPIO 18 (RX)
+GND                  →  GND
+
+Huom: Display-ESP32 saa virran OMASTA USB-kaapelista!
+```
+
+#### I2C LCD (valinnainen, vain vastaanottajalla)
+```
+LCD → ESP32
+────────────
+SDA → GPIO 21
+SCL → GPIO 22
+VCC → 5V
+GND → GND
+I2C-osoite: 0x27
+```
+
+---
+
+## Pikaohje
+
+### 10 minuutin käyttöönotto
+
+**Vaihe 1: Yhdistä LoRa-moduulit**
+- Yhdistä molemmat RYLR896:t ESP32:iin (katso yllä)
+
+**Vaihe 2: Lataa koodi**
+1. Avaa `Roboter_Gruppe_9.ino`
+2. Valitse: **ESP32 Dev Module**
+3. Lataa **MOLEMPIIN** ESP32:iin (sama koodi!)
+
+**Vaihe 3: Aseta roolit**
+- **Vastaanottaja:** Yhdistä GPIO 16 ↔ GPIO 17 hyppylangalla
+- **Lähettäjä:** Jätä GPIO 16 irti
+
+**Vaihe 4: Testaa**
+1. Käynnistä molemmat
+2. Avaa Serial Monitor (115200 baud) molemmille
+3. Tarkista:
+   - Lähettäjä: `>>> SENDER MODE` ja `📤 TX [1]: SEQ:0...`
+   - Vastaanottaja: `>>> RECEIVER MODE` ja `📥 RX [1]: SEQ:0...`
+
+**Vaihe 5: TFT-näyttö (valinnainen)**
+1. Lataa `Roboter_Display_TFT.ino` → ESP32-2432S022
+2. Yhdistä: Robot GPIO 23 → Display GPIO 18 ja GND → GND
+3. Varmista `config.h`: `#define ENABLE_DISPLAY_OUTPUT true`
+4. Lataa koodi uudelleen robottiin
+
+**Valmis!** Järjestelmä toimii.
+
+---
+
+## Ohjelmiston Rakenne
+
+### Hakemistorakenne
+```
+Roboter_Gruppe_9/
+├── Roboter_Gruppe_9.ino    # Pääohjelma
+├── config.h                # Konfiguraatio ja kytkennät
+├── structs.h               # Datarakenteet
+├── functions.h             # Apufunktiot
+├── lora_handler.h          # LoRa-kommunikaatio
+├── health_monitor.h        # Yhteyden valvonta
+├── display_sender.h        # TFT-näytön UART-lähetys
+├── DisplayClient.h         # Näyttökirjasto
+├── MANUAL.md               # Tämä tiedosto
+├── TESTING.md              # Testausohjeet
+└── Python-skriptit/        # PC-datan tallennus
+
+Roboter_Display_TFT/
+└── Roboter_Display_TFT.ino # TFT-näytön koodi
+```
+
+### Tiedostot
+
+**Ydinohjelma:**
+- `Roboter_Gruppe_9.ino` (789 riviä) - Pääohjelma, setup(), loop()
+- `config.h` (182 riviä) - Kaikki asetukset yhdessä paikassa
+- `structs.h` (111 riviä) - Datarakenteet
+- `functions.h` (145 riviä) - LCD ja apufunktiot
+- `lora_handler.h` (264 riviä) - LoRa-kommunikaatio
+- `health_monitor.h` (310 riviä) - Yhteyden valvonta ja tilastointi
+
+**Näyttö:**
+- `display_sender.h` (243 riviä) - UART-lähetys TFT:lle
+- `DisplayClient.h` (194 riviä) - Näyttökirjasto
+- `Roboter_Display_TFT.ino` (607 riviä) - TFT-näytön ohjelma
+
+**Python:**
+- `serial_monitor.py` - Reaaliaikainen värikäs seuranta
+- `data_logger.py` - SQLite-tietokantaan tallennus
+
+### Muistinkäyttö
+- **Flash:** ~250 KB
+- **RAM:** ~45 KB
+
+---
+
+## Konfigurointi
+
+### config.h - Keskitetty konfiguraatio
+
+Kaikki asetukset löytyvät `config.h` -tiedostosta. Muokkaa tätä yhtä tiedostoa.
+
+#### Näyttö-ominaisuudet
+```cpp
+#define ENABLE_DISPLAY_OUTPUT true      // TFT-näyttöasema
+#define DISPLAY_UPDATE_INTERVAL 2000    // Päivitys 2s välein
+#define DISPLAY_TX_PIN 23               // TX-pinni näytölle
+```
+
+#### Kommunikaatio
+```cpp
+#define ENABLE_BIDIRECTIONAL true       // Kaksisuuntainen (ACK)
+#define ACK_INTERVAL 5                  // ACK joka 5. viesti
+#define LISTEN_TIMEOUT 500              // ACK odotus 500ms
+```
+
+#### PC-datan tallennus
+```cpp
+#define ENABLE_CSV_OUTPUT true          // CSV-muoto
+#define DATA_OUTPUT_INTERVAL 2000       // Lähetys 2s välein
+```
+
+#### Valinnaiset anturit (oletuksena pois päältä)
+```cpp
+#define ENABLE_BATTERY_MONITOR false    // Akkuseuranta
+#define ENABLE_AUDIO_DETECTION false    // Äänentunnistus
+#define ENABLE_LIGHT_DETECTION false    // Valontunnistus
+#define ENABLE_CURRENT_MONITOR false    // Virtamittaus
+```
+
+#### Järjestelmä-ominaisuudet
+```cpp
+#define ENABLE_EXTENDED_TELEMETRY false // Lisätiedot (uptime, heap, lämpötila)
+#define ENABLE_PACKET_STATS false       // Yksityiskohtaiset tilastot
+#define ENABLE_PERFORMANCE_MONITOR false// CPU/muisti-seuranta
+#define ENABLE_WATCHDOG false           // Laitteisto-watchdog
+```
+
+**Vinkki:** Testaa ensin kaikki `false`, sitten kytke yksi kerrallaan `true`:ksi.
+
+---
+
+## LoRa-asetukset
+
+### Optimoidut asetukset maksimietäisyydelle
+
+```cpp
+// config.h:
+#define LORA_NETWORK_ID 6               // Verkkotunnus (sama molemmissa!)
+#define LORA_ADDRESS_RECEIVER 1         // Vastaanottajan osoite
+#define LORA_ADDRESS_SENDER 2           // Lähettäjän osoite
+#define LORA_SPREADING_FACTOR 12        // SF12 = max etäisyys
+#define LORA_BANDWIDTH 125              // 125 kHz
+#define LORA_CODING_RATE 1              // 4/5
+#define LORA_TX_POWER 20                // 20 dBm = max teho
+```
+
+**Spreading Factor (SF):**
+- SF7 = nopea, lyhyt kantama
+- SF12 = hidas, pitkä kantama (oletusarvo)
+
+**Etäisyysarviot (SF12):**
+- Lähellä (0-10m): RSSI > -70 dBm, pakettihäviö < 1%
+- Keskietäisyys (10-100m): RSSI -70 to -90 dBm
+- Pitkä (100m+): RSSI < -90 dBm, tarvitsee näköyhteyden
+
+### Viestiformaatti
+
+**Lähettäjä → Vastaanottaja:**
+```
+SEQ:42,LED:1,TOUCH:0,SPIN:2,COUNT:42
+```
+
+**Vastaanottaja → Lähettäjä (ACK):**
+```
+ACK,SEQ:5,LED:0,TOUCH:1,SPIN:3
+```
+
+### Signaalin laatu
+
+**RSSI (Received Signal Strength Indicator):**
+- -40 dBm = erinomainen (lähellä)
+- -70 dBm = hyvä
+- -90 dBm = heikko
+- -120 dBm = huono (yhteys katkeaa pian)
+
+**SNR (Signal-to-Noise Ratio):**
+- +10 dB = erinomainen
+- 0 dB = hyvä
+- -10 dB = heikko
+- -20 dB = huono
+
+---
+
+## TFT-näyttö
+
+### ESP32-2432S022 TFT Display
+
+**Tekniset tiedot:**
+- Näyttö: 2.4" ST7789 TFT (320×240, landscape)
+- Värit: 65k (16-bit RGB)
+- Rajapinta: 8-bit parallel
+- Kirjasto: LovyanGFX
+
+### Kytkentä
+
+**TÄRKEÄÄ: Vain 2 johtoa + virta erikseen!**
+
+```
+Robot ESP32          Display ESP32-2432S022
+──────────────      ─────────────────────────
+GPIO 23 (TX)    →   GPIO 18 (RX)
+GND             →   GND
+
+                    Oma USB-virta näytölle!
+```
+
+**ÄLÄ** syötä virtaa robotin ESP32:sta näytölle!
+
+### Näytön asettelut
+
+Nykyinen versio jakaa näytön kolmeen osaan:
+1. **Header (yläosa, 30px):** Otsikko, LED-indikaattori, yhteyden tila
+2. **Data (keskiosa, 180px):** Päätiedot ja signaalipalkki
+3. **Alert (alaosa, 40px):** LoRa-tila ja signaalin laatutiedot
+
+### Värit ja fontit
+
+**Fontit (config.h):**
+```cpp
+#define FONT_SMALL 1       // Pienet tiedot, otsikot
+#define FONT_NORMAL 2      // Pääteksti
+#define FONT_LARGE 4       // Isot numerot
+```
+
+**Värit (RGB565):**
+```cpp
+#define COLOR_BG 0x0000         // Musta tausta
+#define COLOR_HEADER 0x001F     // Sininen
+#define COLOR_TEXT 0xFFFF       // Valkoinen
+#define COLOR_LABEL 0x8410      // Harmaa
+#define COLOR_GOOD 0x07E0       // Vihreä (hyvä)
+#define COLOR_WARN 0xFD20       // Oranssi (varoitus)
+#define COLOR_BAD 0xF800        // Punainen (huono)
+```
+
+### Signaalin laatupalkki
+
+Oikeassa reunassa näkyy pystysuora palkki:
+- Vihreä (70-100%): Erinomainen signaali
+- Oranssi (40-69%): Keskinkertainen
+- Punainen (0-39%): Heikko
+
+Lasketaan RSSI:n ja SNR:n perusteella.
+
+---
+
+## PC-datan Tallennus
+
+### Python-skriptit
+
+**Vaatimukset:**
+```bash
+pip install pyserial
+```
+
+### 1. serial_monitor.py - Reaaliaikainen seuranta
+
+```bash
+python serial_monitor.py /dev/ttyUSB0 115200
+```
+
+**Ominaisuudet:**
+- Värjätty terminaalituloste
+- RSSI-palkit
+- Elävä data
+- Virheet ja varoitukset korostettuna
+
+### 2. data_logger.py - Tietokantatallennus
+
+```bash
+python data_logger.py /dev/ttyUSB0 115200 lora_data.db
+```
+
+**Ominaisuudet:**
+- Automaattinen SQLite-tietokannan luonti
+- Kaikki CSV-data aikaleimoilla
+- Tapahtumaloki
+- Indeksoitu nopeaan hakuun
+
+### CSV-dataformaatti
+
+```
+DATA_CSV,TIMESTAMP,ROLE,RSSI,SNR,SEQ,MSG_COUNT,CONN_STATE,PACKET_LOSS,LED,TOUCH
+```
+
+**Esimerkki:**
+```
+DATA_CSV,45632,RX,-67,9,142,142,OK,0.00,1,0
+```
+
+### Datan analysointi
+
+**SQLite-komentorivi:**
+```bash
+sqlite3 lora_data.db
+SELECT AVG(rssi) FROM lora_messages;
+SELECT timestamp, packet_loss FROM lora_messages ORDER BY timestamp;
+```
+
+**Python/Pandas:**
+```python
+import sqlite3
+import pandas as pd
+
+conn = sqlite3.connect('lora_data.db')
+df = pd.read_sql_query("SELECT * FROM lora_messages", conn)
+df.plot(x='timestamp', y='rssi')
+```
+
+---
+
+## Vianmääritys
+
+### Ei LoRa-kommunikaatiota
+
+**Tarkista:**
+1. LoRa-moduuli saa virran (3.3V, GND)
+2. Kytkennät: TX→25, RX→26
+3. Molemmat laitteet: Sama `LORA_NETWORK_ID` (oletus: 6)
+4. Serial näyttää: `✓ LoRa initialized`
+
+**Korjaa:**
+- Käynnistä LoRa-moduulit uudelleen
+- Tarkista juotokset
+- Kokeile eri USB-virtalähdettä
+
+### Väärä rooli tunnistettu
+
+**Ongelma:** Lähettäjä toimii vastaanottajana tai päinvastoin
+
+**Tarkista:**
+- Vastaanottaja: GPIO 16 ↔ GPIO 17 **yhdistetty**
+- Lähettäjä: GPIO 16 **irti** (ei yhteyttä)
+
+**Korjaa:**
+- Lisää/poista hyppylanka
+- Käynnistä ESP32 uudelleen
+
+### TFT-näyttö ei toimi
+
+**Tarkista:**
+1. Näyttökoodi ladattu (`Roboter_Display_TFT.ino`)
+2. Kytkennät: Robot GPIO 23 → Display GPIO 18
+3. Yhteinen GND yhdistetty
+4. config.h: `ENABLE_DISPLAY_OUTPUT true`
+
+**Korjaa:**
+- Tarkista Serial Monitorit (sekä robotti että näyttö)
+- Robotti näyttää: `→ Display: MODE:...`
+- Näyttö näyttää: `📥 RX [1]: ...`
+- Vaihda johdot tarvittaessa (TX menee RX:ään!)
+
+### RSSI/SNR-arvot vääriä
+
+**Ongelma:** RSSI näyttää -30 dBm (epärealistinen)
+
+**Tarkista:**
+- LoRa-moduulit ovat liian lähellä (<50cm)
+- Siirrä kauemmas (>1m)
+- RSSI -50 to -120 dBm on normaali
+
+### Kill-switch ei toimi
+
+**Tarkista:**
+1. GPIO 13 ↔ GPIO 14 yhdistetty
+2. Pidä 3 sekuntia (katso Serial Monitor)
+3. Serial näyttää: `🔴 Kill-switch PRESSED...`
+
+**Huom:** Kill-switch toimii ilman LoRa-moduulia (testattavissa erikseen)
+
+### CSV-data ei näy
+
+**Tarkista:**
+1. `ENABLE_CSV_OUTPUT true` config.h:ssa
+2. ESP32 käynnissä (tarkista boot-viestit)
+3. Baudrate 115200
+4. LoRa-moduuli yhdistetty (vastaanottajarooli)
+
+### Kääntövirheet
+
+**Tarkista:**
+- Kaikki .h-tiedostot samassa kansiossa kuin .ino
+- `LiquidCrystal_I2C` -kirjasto asennettu (jos LCD käytössä)
+- Oikea levy valittu: ESP32 Dev Module
+
+---
+
+## Kill-Switch käyttö
+
+**Fyysinen kill-switch:**
+1. Yhdistä GPIO 13 ↔ GPIO 14
+2. Pidä 3 sekuntia
+3. Laite käynnistyy uudelleen
+
+**Etä-kill-switch (LoRa):**
+- Lähetä komento: `CMD:RESTART`
+- Laite käynnistyy uudelleen automaattisesti
+
+**Käyttötapaukset:**
+- Hätäpysäytys testauksen aikana
+- Nopea uudelleenkäynnistys ilman virtakytkentöjä
+- Turvaominaisuus robotin ohjauksessa
+
+---
+
+## Lisätiedot
+
+### Yhteysvalvonta (Connection Watchdog)
+
+Automaattinen yhteyden tilan seuranta:
+- `CONN_CONNECTED` - Normaali käyttö
+- `CONN_WEAK` - Viivästyneet viestit (3-8s)
+- `CONN_LOST` - Ei viestejä >8s
+
+**Automaattinen palautuminen:**
+1. Tila vaihtuu `CONN_LOST`:iin
+2. 3 palautumisyritystä
+3. LoRa-moduuli alustetaan uudelleen
+4. Paluu normaaliin toimintaan
+
+### Pakettihäviön seuranta
+
+Järjestelmä käyttää sekvenssinnumeroita pakettihäviön havaitsemiseen:
+```
+Häviöprosentti = (Puuttuvat paketit / Odotetut paketit) × 100%
+```
+
+Serial Monitor näyttää:
+```
+Packet loss: 2.5% (3/120 lost)
+```
+
+### Suorituskyky
+
+- **Silmukan taajuus:** ~100 Hz (10ms viive)
+- **Lähetysväli:** 2 sekuntia (muokattavissa)
+- **ACK-vastausaika:** <500ms
+- **LCD-päivitysnopeus:** 10 Hz (100ms)
+- **Datan tallennus:** 0.5 Hz (2 sekuntia)
+
+---
+
+## Kehitysohjeet
+
+### Uuden ominaisuuden lisääminen
+
+1. Luo uusi `.h` -tiedosto projektikansioon
+2. Lisää ominaisuusvalitsin `config.h`:hon
+3. Kääri koodi `#if ENABLE_YOUR_FEATURE` -lohkoon
+4. Sisällytä `Roboter_Gruppe_9.ino`:hon
+5. Päivitä dokumentaatio
+6. Testaa ominaisuus PÄÄLLÄ ja POIS
+
+### Koodityyli
+
+- Käytä selkeitä, kuvaavia muuttujan nimiä
+- Lisää kommentit monimutkaiseen logiikkaan
+- Pidä funktiot pieninä ja keskittyvinä
+- Käytä `const` vakioille
+- Vältä globaaleja muuttujia (käytä struct:eja)
+
+---
+
+## Tekniset tiedot
+
+**Kehitys- ja testiympäristö:**
+- ESP32 DevKit v1
+- RYLR896 LoRa (868 MHz)
+- Arduino IDE / PlatformIO
+- LovyanGFX (TFT)
+- Python 3.8+
+
+**Kantama:** Jopa 5+ km (näköyhteys, SF12)
+
+**Virrankulutus:** ~100mA tyypillinen
+
+---
+
+## Yhteenveto
+
+Tämä on tuotantovalmis LoRa-kommunikaatiojärjestelmä, joka sisältää:
+- ✅ Automaattinen roolintunnistus
+- ✅ Kaksisuuntainen kommunikaatio
+- ✅ Reaaliaikainen TFT-näyttö
+- ✅ Yhteyden valvonta ja palautuminen
+- ✅ Pakettihäviön seuranta
+- ✅ PC-datan tallennus
+- ✅ Kill-switch (fyysinen + etä)
+- ✅ Kattava dokumentaatio
+
+**Aloita testaus:** Katso [TESTING.md](TESTING.md)
+
+---
+
+*Viimeksi päivitetty: 14.11.2025*
