@@ -181,4 +181,84 @@
 #define CURRENT_HIGH_THRESHOLD 200       // Warning above 200mA
 #define CURRENT_MAX_THRESHOLD 500        // Critical above 500mA
 
+// =============== CONFIGURATION VALIDATION ================================
+// Compile-time checks for conflicting or suboptimal configurations
+
+// VAROITUS: Molemmat akkuseurantamenetelmät käytössä
+#if ENABLE_BATTERY_MONITOR && ENABLE_CURRENT_MONITOR
+  #warning "════════════════════════════════════════════════════"
+  #warning "⚠️  MOLEMMAT AKKUSEURANTAMENETELMÄT KÄYTÖSSÄ!"
+  #warning ""
+  #warning "battery_monitor.h: ADC (GPIO 35, ~3mV tarkkuus)"
+  #warning "current_monitor.h:  INA219 I2C (~4mV, tarkempi + virta/teho)"
+  #warning ""
+  #warning "SUOSITUS: Poista ENABLE_BATTERY_MONITOR käytöstä."
+  #warning "INA219 tarjoaa tarkemman jännitemittauksen + virran/tehon."
+  #warning "════════════════════════════════════════════════════"
+#endif
+
+// VAROITUS: Adaptive SF ja manuaaliset SF-komennot ristiriidassa
+#if ENABLE_ADAPTIVE_SF && ENABLE_RUNTIME_CONFIG
+  #warning "════════════════════════════════════════════════════"
+  #warning "⚠️  ADAPTIVE SF + RUNTIME CONFIG"
+  #warning ""
+  #warning "Adaptive SF vaihtaa SF:ää automaattisesti RSSI:n mukaan."
+  #warning "Runtime CONFIG:SF:X komennot voivat olla ristiriidassa."
+  #warning ""
+  #warning "HUOM: Adaptive SF yliajaa manuaaliset asetukset."
+  #warning "════════════════════════════════════════════════════"
+#endif
+
+// INFO: Salaus ja etäkomennot
+#if ENABLE_ENCRYPTION && ENABLE_ADVANCED_COMMANDS
+  #pragma message "ℹ️  Salaus käytössä etäkomentojen kanssa."
+  #pragma message "   Varmista että lähettäjä myös salaa komennot!"
+#endif
+
+// MUISTIVAROITUS: Lasketaan arvioitu RAM-käyttö
+#define ESTIMATED_RAM_USAGE \
+  (ENABLE_PACKET_STATS * 100) + \
+  (ENABLE_EXTENDED_TELEMETRY * 50) + \
+  (ENABLE_PERFORMANCE_MONITOR * 30) + \
+  (ENABLE_BATTERY_MONITOR * 20) + \
+  (ENABLE_CURRENT_MONITOR * 30) + \
+  (ENABLE_AUDIO_DETECTION * 80) + \
+  (ENABLE_LIGHT_DETECTION * 90) + \
+  (ENABLE_ADAPTIVE_SF * 40) + \
+  (ENABLE_ENCRYPTION * 10) + \
+  (ENABLE_ADVANCED_COMMANDS * 30)
+
+#if ESTIMATED_RAM_USAGE > 400
+  #warning "════════════════════════════════════════════════════"
+  #warning "⚠️  KORKEA RAM-KÄYTTÖ ARVIOITU"
+  #warning ""
+  #pragma message "   Arvioitu lisämuisti: " STRINGIFY(ESTIMATED_RAM_USAGE) " bytes"
+  #warning ""
+  #warning "ESP32:lla on 320KB RAM, joten tämä ei ole ongelma."
+  #warning "Jos kuitenkin ilmenee epävakautta, harkitse joidenkin"
+  #warning "ominaisuuksien poistamista käytöstä."
+  #warning "════════════════════════════════════════════════════"
+#endif
+
+// I2C-laitteet: Tarkista että ei päällekkäisiä osoitteita
+#if (ENABLE_LIGHT_DETECTION || ENABLE_CURRENT_MONITOR)
+  #pragma message "════════════════════════════════════════════════════"
+  #pragma message "ℹ️  I2C-LAITTEET KÄYTÖSSÄ:"
+  #pragma message "   - LCD 16x2:     0x27 (aina päällä vastaanottajalla)"
+  #if ENABLE_LIGHT_DETECTION
+  #pragma message "   - TCS34725:     0x29 (värisensori)"
+  #endif
+  #if ENABLE_CURRENT_MONITOR
+  #pragma message "   - INA219:       0x40 (virtamittari)"
+  #endif
+  #pragma message ""
+  #pragma message "   I2C-väylä: SDA=GPIO21, SCL=GPIO22"
+  #pragma message "   Kaikki laitteet samalla väylällä - TOIMII!"
+  #pragma message "════════════════════════════════════════════════════"
+#endif
+
+// Helper macro for stringification
+#define STRINGIFY_HELPER(x) #x
+#define STRINGIFY(x) STRINGIFY_HELPER(x)
+
 #endif // CONFIG_H
