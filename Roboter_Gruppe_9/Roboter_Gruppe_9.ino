@@ -37,18 +37,17 @@
 #include "health_monitor.h"
 #include "display_sender.h"  // TFT display station support
 
-// Feature modules
-#if ENABLE_BATTERY_MONITOR
-  #include "battery_monitor.h"
+// Feature modules - Refactored to use wrapper modules
+#if ENABLE_BATTERY_MONITOR || ENABLE_CURRENT_MONITOR
+  #include "sensors.h"  // Unified battery + current monitoring
 #endif
-#if ENABLE_AUDIO_DETECTION
-  #include "audio_detector.h"
+
+#if ENABLE_AUDIO_DETECTION || ENABLE_LIGHT_DETECTION
+  #include "fire_alarm_detector.h"  // Unified audio + light detection
 #endif
-#if ENABLE_LIGHT_DETECTION
-  #include "light_detector.h"
-#endif
-#if ENABLE_CURRENT_MONITOR
-  #include "current_monitor.h"
+
+#if ENABLE_PACKET_STATS || ENABLE_EXTENDED_TELEMETRY
+  #include "detailed_telemetry.h"  // Unified packet stats + system telemetry
 #endif
 
 // =============== KILL-SWITCH CONFIG ================================
@@ -579,21 +578,17 @@ void setup() {
   // Display station (UART-based, works for both sender and receiver)
   initDisplaySender();
 
-  // Feature modules initialization
-  #if ENABLE_BATTERY_MONITOR
-    initBatteryMonitor();
+  // Feature modules initialization - Refactored to use wrapper modules
+  #if ENABLE_BATTERY_MONITOR || ENABLE_CURRENT_MONITOR
+    initSensors();  // Unified battery + current monitoring
   #endif
 
-  #if ENABLE_AUDIO_DETECTION
-    initAudioDetector();
+  #if ENABLE_AUDIO_DETECTION || ENABLE_LIGHT_DETECTION
+    initFireAlarmDetector();  // Unified audio + light detection
   #endif
 
-  #if ENABLE_LIGHT_DETECTION
-    initLightDetector();
-  #endif
-
-  #if ENABLE_CURRENT_MONITOR
-    initCurrentMonitor();
+  #if ENABLE_PACKET_STATS || ENABLE_EXTENDED_TELEMETRY
+    initDetailedTelemetry();  // Unified packet stats + system telemetry
   #endif
 
   #if ENABLE_MANUAL_AT_COMMANDS
@@ -677,6 +672,11 @@ void loop() {
       // Update health monitoring
       updateRSSI(health, remote.rssi);
       trackPacket(health, remote.sequenceNumber);
+
+      // Record packet in detailed telemetry (SNR, timing, etc.)
+      #if ENABLE_PACKET_STATS
+        recordPacketReceived(remote.rssi, remote.snr, remote.sequenceNumber);
+      #endif
 
       #if ENABLE_BIDIRECTIONAL
       // Send ACK every ACK_INTERVAL messages
@@ -769,6 +769,12 @@ void loop() {
               // Update health monitoring for sender too
               updateRSSI(health, remote.rssi);
               trackPacket(health, remote.sequenceNumber);
+
+              // Record packet in detailed telemetry (SNR, timing, etc.)
+              #if ENABLE_PACKET_STATS
+                recordPacketReceived(remote.rssi, remote.snr, remote.sequenceNumber);
+                recordAckReceived();  // Track ACK success rate
+              #endif
             }
             break;  // Got response, stop listening
           }
@@ -800,21 +806,23 @@ void loop() {
     #endif
   }
 
-  // Feature modules monitoring
-  #if ENABLE_BATTERY_MONITOR
-    checkBattery();
+  // Feature modules monitoring - Refactored to use wrapper modules
+  #if ENABLE_BATTERY_MONITOR || ENABLE_CURRENT_MONITOR
+    checkSensors();  // Unified battery + current monitoring
   #endif
 
-  #if ENABLE_AUDIO_DETECTION
-    checkAudioDetector();
+  #if ENABLE_AUDIO_DETECTION || ENABLE_LIGHT_DETECTION
+    checkFireAlarm();  // Unified audio + light detection
   #endif
 
-  #if ENABLE_LIGHT_DETECTION
-    checkLightDetector();
-  #endif
-
-  #if ENABLE_CURRENT_MONITOR
-    checkCurrentMonitor();
+  #if ENABLE_PACKET_STATS || ENABLE_EXTENDED_TELEMETRY
+    // Detailed telemetry prints reports automatically based on intervals
+    // For receiver: print periodic report with health monitor data
+    #if defined(ENABLE_PACKET_STATS) && defined(bRECEIVER)
+      if (bRECEIVER) {
+        printDetailedReport(health);
+      }
+    #endif
   #endif
 
   delay(10);
