@@ -2,14 +2,20 @@
 
 Python scripts for real-time monitoring and data logging from ESP32 via serial connection.
 
+Supports both **basic** and **extended** telemetry modes with automatic format detection.
+
 ## 📋 Requirements
 
 ```bash
-pip install pyserial
+pip install pyserial matplotlib pandas
 ```
 
 For database logging (data_logger.py only):
 - SQLite3 (included in Python standard library)
+
+For data analysis and visualization (analyze_data.py):
+- pandas
+- matplotlib
 
 ## 🚀 Quick Start
 
@@ -55,7 +61,9 @@ python data_logger.py /dev/ttyUSB0 115200 lora_data.db
 
 Creates SQLite database with all received data for later analysis.
 
-## 📊 CSV Data Format
+## 📊 CSV Data Formats
+
+### Basic Format (ENABLE_CSV_OUTPUT)
 
 ```
 DATA_CSV,TIMESTAMP,ROLE,RSSI,SNR,SEQ,MSG_COUNT,CONN_STATE,PACKET_LOSS,LED,TOUCH
@@ -77,6 +85,40 @@ DATA_CSV,45632,RX,-67,9,142,142,OK,0.00,1,0
 - `PACKET_LOSS`: Percentage (0.00 to 100.00)
 - `LED`: LED state (0 or 1)
 - `TOUCH`: Touch sensor state (0 or 1)
+
+### Extended Format (with optional telemetry enabled)
+
+When additional features are enabled in config.h, the CSV format automatically extends to include:
+
+**Battery Monitoring** (ENABLE_BATTERY_MONITOR):
+- `BATTERY_V`: Battery voltage (V)
+- `BATTERY_%`: Battery percentage (0-100)
+- `BATTERY_STATUS`: OK, LOW, CRITICAL
+
+**Current Monitoring** (ENABLE_CURRENT_MONITOR):
+- `CURRENT_MA`: Current draw (mA)
+- `BUS_V`: Bus voltage (V)
+- `POWER_MW`: Power consumption (mW)
+- `ENERGY_MAH`: Cumulative energy (mAh)
+
+**System Telemetry** (ENABLE_EXTENDED_TELEMETRY):
+- `UPTIME_S`: Device uptime (seconds)
+- `FREE_HEAP`: Free heap memory (bytes)
+- `CPU_TEMP`: CPU temperature (°C)
+- `LOOP_FREQ`: Main loop frequency (Hz)
+
+**Fire Alarm Detection**:
+- Audio (ENABLE_AUDIO_DETECTION): `AUDIO_DET`, `AUDIO_RMS`, `AUDIO_PEAKS`
+- Light (ENABLE_LIGHT_DETECTION): `LIGHT_DET`, `LIGHT_R`, `LIGHT_G`, `LIGHT_B`, `LIGHT_LUX`
+
+**Advanced LoRa** (ENABLE_PACKET_STATS):
+- `SF`: Spreading Factor (7-12)
+- `TX_POWER`: Transmission power (dBm)
+
+**Example Extended CSV:**
+```
+DATA_CSV,45632,RX,1,-67,9,142,142,OK,0.00,1,0,3.85,75,OK,85.5,3.85,329.2,125.3,3600,245000,45.2,100,0,85,0,0,500,300,200,15.5,7,14
+```
 
 ## 🛠 Python Scripts
 
@@ -108,7 +150,7 @@ python serial_monitor.py COM3 115200
 
 ### data_logger.py
 
-**SQLite database logger for data analysis**
+**Basic SQLite database logger**
 
 Features:
 - ✅ Automatic database creation
@@ -125,6 +167,33 @@ python data_logger.py [PORT] [BAUDRATE] [DATABASE]
 python data_logger.py /dev/ttyUSB0 115200 lora_data.db
 python data_logger.py COM3 115200 my_experiment.db
 ```
+
+### data_logger_extended.py ⭐ NEW
+
+**Extended telemetry logger with full feature support**
+
+Features:
+- ✅ All features of basic logger
+- ✅ **Auto-detects CSV format** (basic or extended)
+- ✅ Supports all optional telemetry fields
+- ✅ Battery monitoring (voltage, percentage, status)
+- ✅ Current monitoring (INA219 sensor)
+- ✅ System telemetry (uptime, heap, temperature)
+- ✅ Fire alarm detection (audio + light sensors)
+- ✅ Advanced LoRa statistics
+- ✅ Extended database schema
+
+**Usage:**
+```bash
+python data_logger_extended.py [PORT] [BAUDRATE] [DATABASE]
+
+# Examples:
+python data_logger_extended.py /dev/ttyUSB0 115200 lora_extended.db
+python data_logger_extended.py COM3 115200 full_test.db
+```
+
+**Auto-detection:**
+The logger automatically detects which features are enabled in your ESP32 and adapts the database schema. No configuration needed!
 
 **Database schema:**
 ```sql
@@ -278,13 +347,79 @@ python
 >>> df.to_csv('results.csv')
 ```
 
+## 🧪 Testing with Example Data
+
+Generate realistic synthetic data for testing:
+
+```bash
+# Generate 1 hour of example data
+python example_data_generator.py 60 example_1h.db
+
+# Generate 24 hours of data
+python example_data_generator.py 1440 example_24h.db
+
+# Analyze the example data
+python analyze_data.py example_1h.db
+```
+
+The generator creates:
+- ✅ Realistic signal variations
+- ✅ Battery discharge over time
+- ✅ Random fire alarm events
+- ✅ Connection quality changes
+- ✅ Full telemetry data
+
+**Output:** Both SQLite database (.db) and CSV file (.csv)
+
+## 📚 Database Schema
+
+See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for complete documentation of:
+- Table structures
+- Field descriptions
+- Indexes
+- Example queries
+- Use cases
+
+## 🔧 Configuration in ESP32
+
+Enable features in `config.h`:
+
+```cpp
+// Basic logging (always on)
+#define ENABLE_CSV_OUTPUT true       // Enable CSV data output
+#define DATA_OUTPUT_INTERVAL 2000    // Output every 2 seconds
+
+// Extended telemetry (optional)
+#define ENABLE_BATTERY_MONITOR true       // Battery voltage (GPIO 35)
+#define ENABLE_CURRENT_MONITOR true       // INA219 current sensor (I2C)
+#define ENABLE_EXTENDED_TELEMETRY true    // Uptime, heap, temp
+#define ENABLE_AUDIO_DETECTION true       // Smoke alarm sound (GPIO 34)
+#define ENABLE_LIGHT_DETECTION true       // Flashing LED (TCS34725 I2C)
+#define ENABLE_PACKET_STATS true          // Advanced LoRa stats
+```
+
+Each feature adds corresponding fields to the CSV output. The Python loggers detect this automatically!
+
 ## 🎯 Next Steps
 
 1. ✅ Upload code with `ENABLE_CSV_OUTPUT true`
 2. ✅ Test with `serial_monitor.py`
-3. ✅ Collect data with `data_logger.py`
-4. ✅ Analyze your results!
+3. ✅ Collect data with `data_logger_extended.py` (recommended) or `data_logger.py`
+4. ✅ Analyze your results with `analyze_data.py`
+5. ✅ Generate example data for testing Python scripts
+
+## 🆕 What's New in Extended Version
+
+- **Auto-detection**: Automatically adapts to enabled features
+- **Full telemetry**: Battery, current, temperature, fire alarms
+- **Better events**: Tracks fire alarms, battery warnings, state changes
+- **Example data**: Generate realistic test data for development
+- **Complete schema**: Documented database structure
+- **Backward compatible**: Works with basic CSV format too
 
 ---
 
-**Questions?** Check the main README.md or inspect the Python script source code for more details.
+**Questions?** Check:
+- [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) - Complete database documentation
+- Main README.md - Project overview
+- Python script source code - Implementation details
