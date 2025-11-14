@@ -67,24 +67,40 @@
 #define SIGNAL_TESTING_MODE true
 
 // =============== FONT SIZES ================================
-#define FONT_SMALL 1     // Detailed info, labels
-#define FONT_NORMAL 2    // Main content, readable data
-#define FONT_LARGE 4     // Important numbers, titles
+// Kolme fonttikokoa helposti muokattaviksi
+#define FONT_SMALL 1     // Pienet tiedot, labelit (8px)
+#define FONT_NORMAL 2    // Pääteksti, luettava data (16px)
+#define FONT_LARGE 4     // Isot numerot, otsikot (32px)
 
 // =============== UPDATE INTERVALS ================================
-#define DISPLAY_UPDATE_INTERVAL 500     // Update display every 500ms (reduced from 100ms to avoid flicker)
-#define DATA_TIMEOUT 5000               // No data timeout (5s)
+#define DISPLAY_UPDATE_INTERVAL 500     // Näytön päivitys 500ms välein
+#define DATA_TIMEOUT 5000               // Data-yhteyden timeout (5s)
 
-// =============== COLORS ================================
-#define COLOR_BG 0x0000          // Black
-#define COLOR_HEADER 0x001F      // Blue
-#define COLOR_TEXT 0xFFFF        // White
-#define COLOR_LABEL 0x8410       // Gray
-#define COLOR_GOOD 0x07E0        // Green
-#define COLOR_WARN 0xFD20        // Orange
-#define COLOR_BAD 0xF800         // Red
-#define COLOR_ALERT_BG 0xF800    // Red background
-#define COLOR_ALERT_TEXT 0xFFFF  // White text
+// =============== VÄRIPALETTI ================================
+// Helposti muokattavat värit - voit vaihtaa RGB565-arvot tarpeen mukaan
+// RGB565 laskin: https://rgbcolorpicker.com/565
+
+// Perusvärit
+#define COLOR_BG           0x0000    // Musta tausta
+#define COLOR_PRIMARY      0x001F    // Sininen (pääväri, header)
+#define COLOR_SECONDARY    0xFD20    // Oranssi (toissijainen, aktiivinen tila)
+#define COLOR_TEXT_PRIMARY 0xFFFF    // Valkoinen teksti
+#define COLOR_TEXT_SECONDARY 0x8410  // Harmaa teksti (labelit)
+
+// Tilaindikaattorit
+#define COLOR_SUCCESS      0x07E0    // Vihreä (hyvä signaali, yhteys OK)
+#define COLOR_WARNING      0xFD20    // Oranssi (varoitus, heikko signaali)
+#define COLOR_ERROR        0xF800    // Punainen (virhe, yhteys poikki)
+
+// Vanhemmat nimitykset (yhteensopivuus)
+#define COLOR_HEADER       COLOR_PRIMARY
+#define COLOR_TEXT         COLOR_TEXT_PRIMARY
+#define COLOR_LABEL        COLOR_TEXT_SECONDARY
+#define COLOR_GOOD         COLOR_SUCCESS
+#define COLOR_WARN         COLOR_WARNING
+#define COLOR_BAD          COLOR_ERROR
+#define COLOR_ALERT_BG     COLOR_ERROR
+#define COLOR_ALERT_TEXT   COLOR_TEXT_PRIMARY
 
 // =============== GLOBAL OBJECTS ================================
 static LGFX tft;
@@ -110,19 +126,58 @@ bool alertActive = false;
 // LoRa connection status (extracted from incoming data)
 String loraConnectionState = "UNKNOWN";  // OK, WEAK, LOST, UNKNOWN
 
-// =============== DISPLAY REGIONS (Landscape 320x240) ===============
-#define HEADER_Y 0
-#define HEADER_H 30
-#define DATA_Y 30
-#define DATA_H 180
-#define ALERT_Y 210
-#define ALERT_H 40       // Increased from 30 to fit more info
+// Pakettihäviön seuranta (packet loss tracking)
+int lastReceivedSeq = -1;       // Viimeisin vastaanotettu sekvenssinnumero
+int expectedSeq = 0;            // Odotettu seuraava sekvenssinnumero
+int totalPacketsExpected = 0;   // Odotetut paketit yhteensä
+int totalPacketsReceived = 0;   // Vastaanotetut paketit yhteensä
+int totalPacketsLost = 0;       // Menetetyt paketit yhteensä
+float packetLossPercent = 0.0;  // Pakettihäviöprosentti
 
-// Signal quality bar (right side)
-#define SIGNAL_BAR_X 280
-#define SIGNAL_BAR_Y (DATA_Y + 10)
-#define SIGNAL_BAR_W 30
-#define SIGNAL_BAR_H (DATA_H - 20)
+// Aikaleiman tallennus
+unsigned long lastPacketTime = 0;  // Milloin viimeisin paketti saapui
+String currentTimestamp = "00:00"; // Nykyinen aikaleima (esim. "12:34")
+
+// =============== NÄYTÖN LAYOUT (Landscape 320x240) ===============
+// Näyttö jaettu kolmeen pääosaan: YLÄ, KESKI, ALA
+//
+// ┌────────────────────────────────────────┐
+// │  YLÄ-OSA (Header) - 30px               │  Otsikko, LED, yhteys
+// ├──────────────────┬─────────────────────┤
+// │                  │                     │
+// │  VASEN SARAKE    │   OIKEA SARAKE      │  Data jaettu kahtia
+// │  - Aikaleima     │   - RSSI, SNR       │
+// │  - Paketit       │   - Pakettihäviö    │  + Signaalipalkki
+// │  - Aika viime    │   - Laatuprosentti  │    oikealla
+// │                  │                     │
+// │  KESKI-OSA (Data) - 150px              │
+// ├────────────────────────────────────────┤
+// │  ALA-OSA (Footer) - 60px               │  LoRa ONLINE + tiedot
+// │  LoRa ONLINE                           │
+// │  -85dBm | Addr:1 | RX                  │
+// └────────────────────────────────────────┘
+
+// Ylä-osa (Header)
+#define HEADER_Y        0
+#define HEADER_H        30
+
+// Keski-osa (Data) - jaettu vasempaan ja oikeaan
+#define DATA_Y          30
+#define DATA_H          150
+#define DATA_LEFT_X     10              // Vasen sarake alkaa
+#define DATA_LEFT_W     130             // Vasen sarake leveys
+#define DATA_RIGHT_X    150             // Oikea sarake alkaa
+#define DATA_RIGHT_W    120             // Oikea sarake leveys (ilman signaalipalkkia)
+
+// Ala-osa (Footer)
+#define FOOTER_Y        180
+#define FOOTER_H        60
+
+// Signaalipalkki (oikeassa reunassa)
+#define SIGNAL_BAR_X    280
+#define SIGNAL_BAR_Y    (DATA_Y + 10)
+#define SIGNAL_BAR_W    30
+#define SIGNAL_BAR_H    (DATA_H - 20)
 
 // =============== SIGNAL QUALITY HELPERS ================================
 // Based on field testing data:
@@ -273,6 +328,8 @@ void parseMessage(String message) {
 
   // Parse CSV format: KEY:VALUE,KEY2:VALUE2,...
   int startPos = 0;
+  int receivedSeq = -1;
+
   while (startPos < message.length()) {
     // Find next comma
     int commaPos = message.indexOf(',', startPos);
@@ -289,10 +346,62 @@ void parseMessage(String message) {
       value.trim();
 
       setFieldValue(key, value);
+
+      // Tallenna sekvenssinnumero pakettihäviön laskentaa varten
+      if (key == "SEQ") {
+        receivedSeq = value.toInt();
+      }
     }
 
     startPos = commaPos + 1;
   }
+
+  // Laske pakettihäviö sekvenssinnumeroiden perusteella
+  if (receivedSeq >= 0) {
+    if (lastReceivedSeq == -1) {
+      // Ensimmäinen paketti
+      lastReceivedSeq = receivedSeq;
+      expectedSeq = receivedSeq + 1;
+      totalPacketsReceived = 1;
+      totalPacketsExpected = 1;
+    } else {
+      // Laske kuinka monta pakettia odotettiin
+      int packetsExpectedSinceLastn = receivedSeq - lastReceivedSeq;
+
+      if (packetsExpectedSinceLastn > 0) {
+        totalPacketsExpected += packetsExpectedSinceLastn;
+        totalPacketsReceived += 1;  // Saimme yhden paketin
+
+        // Jos sekvenssinnumero hyppäsi, paketit puuttuvat
+        if (packetsExpectedSinceLastn > 1) {
+          int lostPackets = packetsExpectedSinceLastn - 1;
+          totalPacketsLost += lostPackets;
+          Serial.print("⚠️  Lost packets detected: ");
+          Serial.print(lostPackets);
+          Serial.print(" (SEQ ");
+          Serial.print(lastReceivedSeq + 1);
+          Serial.print(" to ");
+          Serial.print(receivedSeq - 1);
+          Serial.println(")");
+        }
+
+        lastReceivedSeq = receivedSeq;
+        expectedSeq = receivedSeq + 1;
+      }
+    }
+
+    // Laske pakettihäviöprosentti
+    if (totalPacketsExpected > 0) {
+      packetLossPercent = (float)totalPacketsLost / (float)totalPacketsExpected * 100.0;
+    }
+  }
+
+  // Päivitä aikaleima
+  lastPacketTime = millis();
+  unsigned long seconds = millis() / 1000;
+  int minutes = (seconds / 60) % 60;
+  int secs = seconds % 60;
+  currentTimestamp = String(minutes) + ":" + (secs < 10 ? "0" : "") + String(secs);
 }
 
 // =============== DATA FIELD MANAGEMENT ================================
@@ -393,96 +502,118 @@ void drawHeader() {
 }
 
 void drawData() {
-  // Clear data area (leave space for signal bar on right if enabled)
+  // Tyhjennä data-alue (jätä tilaa signaalipalkilleVaraa oikealla)
   #if SIGNAL_TESTING_MODE
-  int dataWidth = SIGNAL_BAR_X - 5;  // Leave space for signal bar
+  int dataWidth = SIGNAL_BAR_X - 5;  // Jätä tilaa signaalipalkilleile
   #else
   int dataWidth = TFT_WIDTH;
   #endif
   tft.fillRect(0, DATA_Y, dataWidth, DATA_H, COLOR_BG);
 
   if (fieldCount == 0) {
-    // No data yet
+    // Ei dataa vielä
     tft.setTextDatum(MC_DATUM);
     tft.setTextSize(FONT_SMALL);
     tft.setTextColor(COLOR_LABEL);
-    tft.drawString("No data received", dataWidth/2, DATA_Y + DATA_H/2);
+    tft.drawString("Ei dataa", dataWidth/2, DATA_Y + DATA_H/2);
     return;
   }
 
-  // Get important fields
+  // Hae tärkeät kentät
+  String rssiStr = getFieldValue("RSSI");
+  String snrStr = getFieldValue("SNR");
   String loraPkts = getFieldValue("LoRaPkts");
-  String uptime = getFieldValue("Uptime");
-  String mode = getFieldValue("Mode");
-  String count = getFieldValue("Count");
-  String touch = getFieldValue("TOUCH");
+  String seqStr = getFieldValue("SEQ");
 
-  // === MAIN INFO AREA: Normal-sized, readable ===
+  // Laske aika viimeisestä paketista
+  unsigned long timeSinceLastPacket = (millis() - lastPacketTime) / 1000;  // sekunteja
+  String timeSinceStr = String(timeSinceLastPacket) + "s";
+
+  // ═══════════════════════════════════════════════════════════
+  // VASEN SARAKE - Aikaleima, paketit, aika viimeisestä
+  // ═══════════════════════════════════════════════════════════
   tft.setTextDatum(TL_DATUM);
+  int leftX = DATA_LEFT_X;
+  int leftY = DATA_Y + 15;
+  int lineHeight = 25;
+
+  // Aikaleima (FONT_NORMAL)
   tft.setTextSize(FONT_NORMAL);
-
-  int x = 10;
-  int y = DATA_Y + 15;
-  int lineHeight = 28;  // Spacing for normal font
-
-  // Mode (RECEIVER/SENDER)
   tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Mode:", x, y);
-  tft.setTextColor(COLOR_TEXT);
-  tft.drawString(mode.length() > 0 ? mode : "?", x + 70, y);
-  y += lineHeight;
+  tft.drawString("Aika:", leftX, leftY);
+  tft.setTextColor(COLOR_TEXT_PRIMARY);
+  tft.drawString(currentTimestamp, leftX + 70, leftY);
+  leftY += lineHeight;
 
-  // LoRa Packets
+  // Paketit (FONT_NORMAL)
   tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Packets:", x, y);
-  tft.setTextColor(COLOR_TEXT);
-  tft.drawString(loraPkts.length() > 0 ? loraPkts : "0", x + 100, y);
-  y += lineHeight;
+  tft.drawString("Paketit:", leftX, leftY);
+  tft.setTextColor(COLOR_TEXT_PRIMARY);
+  String pktsStr = loraPkts.length() > 0 ? loraPkts : "0";
+  tft.drawString(pktsStr, leftX + 70, leftY);
+  leftY += lineHeight;
 
-  // Count (total messages)
-  tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Count:", x, y);
-  tft.setTextColor(COLOR_TEXT);
-  tft.drawString(count.length() > 0 ? count : "0", x + 90, y);
-  y += lineHeight;
-
-  // Touch status
-  tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Touch:", x, y);
-  tft.setTextColor(COLOR_TEXT);
-  tft.drawString(touch.length() > 0 ? touch : "?", x + 85, y);
-  y += lineHeight;
-
-  // Uptime
-  tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Uptime:", x, y);
-  tft.setTextColor(COLOR_TEXT);
-  tft.drawString(uptime.length() > 0 ? uptime : "0s", x + 100, y);
-  y += lineHeight;
-
-  // Additional fields (if any)
+  // Sekvenssinnumero (FONT_SMALL)
   tft.setTextSize(FONT_SMALL);
-  int smallY = y + 5;
-  int fieldNum = 0;
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("SEQ:", leftX, leftY);
+  tft.setTextColor(COLOR_TEXT_PRIMARY);
+  tft.drawString(seqStr.length() > 0 ? seqStr : "-", leftX + 35, leftY);
+  leftY += 18;
 
-  for (int i = 0; i < fieldCount && fieldNum < 3; i++) {
-    // Skip already displayed fields
-    if (fields[i].key == "Mode" || fields[i].key == "LoRaPkts" ||
-        fields[i].key == "Count" || fields[i].key == "TOUCH" ||
-        fields[i].key == "Uptime" || fields[i].key == "ConnState" ||
-        fields[i].key == "RSSI" || fields[i].key == "SNR" ||
-        fields[i].key == "LED" || fields[i].key == "SEQ") {
-      continue;
-    }
+  // Aika viime paketista (FONT_SMALL)
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("Viime:", leftX, leftY);
+  tft.setTextColor(timeSinceLastPacket > 5 ? COLOR_WARNING : COLOR_TEXT_PRIMARY);
+  tft.drawString(timeSinceStr, leftX + 40, leftY);
+  leftY += 18;
 
-    tft.setTextColor(COLOR_LABEL);
-    String keyStr = fields[i].key + ":";
-    tft.drawString(keyStr, x, smallY);
-    tft.setTextColor(COLOR_TEXT);
-    tft.drawString(fields[i].value, x + 60, smallY);
-    smallY += 15;
-    fieldNum++;
-  }
+  // ═══════════════════════════════════════════════════════════
+  // OIKEA SARAKE - RSSI, SNR, pakettihäviö
+  // ═══════════════════════════════════════════════════════════
+  int rightX = DATA_RIGHT_X;
+  int rightY = DATA_Y + 15;
+
+  // RSSI (FONT_LARGE - iso numero)
+  tft.setTextSize(FONT_LARGE);
+  tft.setTextColor(COLOR_TEXT_PRIMARY);
+  String rssiValue = rssiStr.length() > 0 ? rssiStr.substring(0, rssiStr.indexOf("d")) : "-";
+  tft.drawString(rssiValue, rightX, rightY);
+
+  // dBm (FONT_SMALL - pieni yksikkö)
+  tft.setTextSize(FONT_SMALL);
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("dBm", rightX + 55, rightY + 20);
+  rightY += 50;
+
+  // SNR (FONT_NORMAL)
+  tft.setTextSize(FONT_NORMAL);
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("SNR:", rightX, rightY);
+  tft.setTextColor(COLOR_TEXT_PRIMARY);
+  String snrValue = snrStr.length() > 0 ? snrStr : "-";
+  tft.drawString(snrValue, rightX + 50, rightY);
+  rightY += 25;
+
+  // Pakettihäviö (FONT_SMALL)
+  tft.setTextSize(FONT_SMALL);
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("Havioi:", rightX, rightY);
+
+  // Väritä pakettihäviöprosentti
+  uint16_t lossColor = COLOR_SUCCESS;
+  if (packetLossPercent > 10.0) lossColor = COLOR_ERROR;
+  else if (packetLossPercent > 2.0) lossColor = COLOR_WARNING;
+
+  tft.setTextColor(lossColor);
+  String lossStr = String(packetLossPercent, 1) + "%";
+  tft.drawString(lossStr, rightX + 45, rightY);
+  rightY += 18;
+
+  // Menetetyt paketit (FONT_SMALL)
+  tft.setTextColor(COLOR_LABEL);
+  String lostPacketsStr = "(" + String(totalPacketsLost) + "/" + String(totalPacketsExpected) + ")";
+  tft.drawString(lostPacketsStr, rightX, rightY);
 }
 
 void drawSignalQualityBar() {
@@ -529,78 +660,78 @@ void drawSignalQualityBar() {
 }
 
 void drawAlert() {
-  // LoRa Status Bar - signal quality information
-  // Color scheme: Gray (no connection) / Orange (connection active)
+  // ═══════════════════════════════════════════════════════════
+  // ALA-OSA (Footer) - LoRa-yhteystila ja -tiedot
+  // ═══════════════════════════════════════════════════════════
 
-  // Extract LoRa data from fields
+  // Hae LoRa-tiedot kentistä
   String connState = getFieldValue("ConnState");
   String rssi = getFieldValue("RSSI");
-  String snr = getFieldValue("SNR");
+  String mode = getFieldValue("Mode");  // RX tai TX
 
   if (connState.length() == 0) {
-    connState = loraConnectionState;  // Use global if not in fields
+    connState = loraConnectionState;  // Käytä globaalia jos ei kentissä
   }
   loraConnectionState = connState;
 
-  // Parse RSSI/SNR for quality evaluation
-  int rssiValue = (rssi.length() > 0) ? rssi.substring(0, rssi.indexOf("d")).toInt() : -100;
-  int snrValue = (snr.length() > 0) ? snr.substring(0, snr.indexOf("d")).toInt() : -10;
-  int quality = calculateSignalQuality(rssiValue, snrValue);
+  // Parse RSSI-arvo
+  String rssiValue = rssi.length() > 0 ? rssi.substring(0, rssi.indexOf("d")) : "-";
 
-  // Determine background color:
-  // - Gray: No connection (UNKNOWN, LOST, CONNECTING)
-  // - Orange: Connection active (OK, WEAK)
-  uint16_t bgColor = COLOR_LABEL;  // Default: Gray
-  String statusName = "NO LINK";
+  // LoRa-osoite (oletetaan vastaanottaja=1, lähettäjä=2)
+  String address = (mode == "RX" || mode == "RECEIVER") ? "1" : "2";
+
+  // Rooli (lyhyt muoto)
+  String role = (mode == "RX" || mode == "RECEIVER") ? "RX" : "TX";
+
+  // Määrittele taustaväri yhteyden tilan mukaan:
+  // - Harmaa: Ei yhteyttä (UNKNOWN, LOST, CONNECTING)
+  // - Oranssi: Yhteys aktiivinen (OK, WEAK)
+  uint16_t bgColor = COLOR_LABEL;  // Oletus: Harmaa
+  String statusText = "LoRa OFFLINE";
 
   if (connState == "OK" || connState == "CONNECTED" || connState == "WEAK") {
-    bgColor = COLOR_WARN;  // Orange - connection active
-    statusName = "ACTIVE";
+    bgColor = COLOR_SECONDARY;  // Oranssi - yhteys aktiivinen
+    statusText = "LoRa ONLINE";
   } else if (connState == "LOST") {
-    bgColor = COLOR_LABEL;  // Gray
-    statusName = "LOST";
+    bgColor = COLOR_LABEL;  // Harmaa
+    statusText = "LoRa LOST";
   } else if (connState == "CONNECT") {
-    bgColor = COLOR_LABEL;  // Gray
-    statusName = "CONNECTING";
+    bgColor = COLOR_LABEL;  // Harmaa
+    statusText = "LoRa CONNECTING";
   }
 
-  // Draw background
-  tft.fillRect(0, ALERT_Y, TFT_WIDTH, ALERT_H, bgColor);
+  // Piirrä tausta
+  tft.fillRect(0, FOOTER_Y, TFT_WIDTH, FOOTER_H, bgColor);
 
-  // === UPPER LINE: Title and status ===
+  // ═══════════════════════════════════════════════════════════
+  // YLÄ RIVI: LoRa ONLINE/OFFLINE (FONT_LARGE)
+  // ═══════════════════════════════════════════════════════════
   tft.setTextDatum(TL_DATUM);
-  tft.setTextSize(FONT_NORMAL);
-  tft.setTextColor(COLOR_TEXT);
+  tft.setTextSize(FONT_LARGE);
+  tft.setTextColor(COLOR_TEXT_PRIMARY);
 
-  int x = 5;
-  int y = ALERT_Y + 5;
+  int x = 10;
+  int y = FOOTER_Y + 5;
 
-  // "LoRa:" label
-  tft.drawString("LoRa:", x, y);
-  x += tft.textWidth("LoRa:") + 8;
+  tft.drawString(statusText, x, y);
 
-  // Status (ACTIVE/NO LINK/etc)
-  tft.drawString(statusName, x, y);
+  // ═══════════════════════════════════════════════════════════
+  // ALA RIVI: Pienellä fontilla dBm, address, rooli (FONT_SMALL)
+  // ═══════════════════════════════════════════════════════════
+  tft.setTextSize(FONT_SMALL);
+  tft.setTextColor(COLOR_TEXT_PRIMARY);
 
-  // === LOWER LINE: Signal metrics (normal font) ===
-  x = 5;
-  y = ALERT_Y + 25;
-  tft.setTextSize(FONT_NORMAL);
+  x = 10;
+  y = FOOTER_Y + 40;
 
-  // RSSI
-  if (rssi.length() > 0) {
-    tft.drawString("RSSI:" + rssi, x, y);
-    x += tft.textWidth("RSSI:" + rssi) + 12;
-  }
+  // dBm
+  String detailsLine = rssiValue + "dBm";
 
-  // SNR
-  if (snr.length() > 0) {
-    tft.drawString("SNR:" + snr, x, y);
-    x += tft.textWidth("SNR:" + snr) + 12;
-  }
+  // Address
+  detailsLine += " | Addr:" + address;
 
-  // Quality percentage
-  if (connState == "OK" || connState == "WEAK") {
-    tft.drawString("Q:" + String(quality) + "%", x, y);
-  }
+  // Rooli
+  detailsLine += " | " + role;
+
+  tft.drawString(detailsLine, x, y);
 }

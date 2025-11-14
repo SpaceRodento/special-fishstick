@@ -73,11 +73,13 @@ Role (sender/receiver) is automatically detected using a jumper wire:
 
 ### Documentation
 - `README.md` - This file, project overview and quick start
-- **`COMPREHENSIVE_MANUAL.md`** - **📖 Complete guide** (troubleshooting, setup, advanced features)
+- **`MANUAL.md`** - **📖 Complete manual** (hardware, software, configuration, troubleshooting)
+- **`TESTING.md`** - **🧪 Testing guide** (comprehensive testing procedures for all features)
 - `PC_LOGGING_README.md` - PC data logging guide with Python scripts
-- `archive/` - Archived documentation (LCD versions, watchdog guide, etc.)
+- `archive/` - Archived documentation (older guides and references)
 
-> 💡 **For detailed instructions**, see `COMPREHENSIVE_MANUAL.md`
+> 💡 **For detailed instructions**, see `MANUAL.md`
+> 💡 **For testing procedures**, see `TESTING.md`
 
 ### Reference/Testing
 - `RYLR896_simple.ino` - Simple test code for basic LoRa validation
