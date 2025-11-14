@@ -39,6 +39,7 @@
 extern DeviceState local;
 extern DeviceState remote;
 extern bool bRECEIVER;
+extern HealthMonitor health;
 
 #if ENABLE_BATTERY_MONITOR
   extern float readBatteryVoltage();
@@ -122,9 +123,6 @@ void sendDisplayUpdate() {
 
     lastDisplayUpdate = now;
 
-    // Debug output
-    Serial.print("📤 Sending display update... ");
-
     // Start building message
     display.clear();
 
@@ -143,6 +141,9 @@ void sendDisplayUpdate() {
       display.set("R_TOUCH", remote.touchState ? "YES" : "NO");
     }
 
+    // Connection state (always send, even if UNKNOWN)
+    display.set("ConnState", getConnectionStateString(health.state));
+
     // RSSI (if available)
     if (remote.rssi != 0) {
       display.set("RSSI", String(remote.rssi) + "dBm");
@@ -151,6 +152,16 @@ void sendDisplayUpdate() {
     // SNR (if available)
     if (remote.snr != 0) {
       display.set("SNR", String(remote.snr) + "dB");
+    }
+
+    // Uptime (for display timer)
+    display.set("Uptime", String(millis() / 1000) + "s");
+
+    // LoRa packet count (messages sent/received via LoRa)
+    if (bRECEIVER) {
+      display.set("LoRaPkts", String(remote.messageCount));
+    } else {
+      display.set("LoRaPkts", String(local.messageCount));
     }
 
     // Battery voltage (if enabled)
@@ -184,7 +195,6 @@ void sendDisplayUpdate() {
 
     // Send all data
     display.send();
-    Serial.println("✓ Sent!");
 
     // Check for fire alerts
     #if ENABLE_AUDIO_DETECTION

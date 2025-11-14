@@ -101,14 +101,6 @@ void initKillSwitch() {
 void checkKillSwitch() {
   bool pressed = (digitalRead(KILLSWITCH_READ_PIN) == LOW);
 
-  // Debug: Print GPIO state every 2 seconds if debug enabled
-  if (KILLSWITCH_DEBUG && millis() - lastKillSwitchDebug >= 2000) {
-    lastKillSwitchDebug = millis();
-    Serial.print("[KillSwitch Debug] GPIO13: ");
-    Serial.print(digitalRead(KILLSWITCH_READ_PIN));
-    Serial.println(pressed ? " (PRESSED)" : " (released)");
-  }
-
   if (pressed) {
     if (killSwitchPressStart == 0) {
       killSwitchPressStart = millis();
@@ -604,35 +596,63 @@ void setup() {
     initCurrentMonitor();
   #endif
 
+  #if ENABLE_MANUAL_AT_COMMANDS
+    Serial.println("\n🛠️  Manual AT Commands: ENABLED");
+    Serial.println("   Type AT commands in Serial Monitor to test LoRa module:");
+    Serial.println("   - AT (test connection)");
+    Serial.println("   - AT+VER? (get version)");
+    Serial.println("   - AT+ADDRESS? (get address)");
+    Serial.println("   - AT+NETWORKID? (get network ID)");
+    Serial.println("   - AT+PARAMETER? (get LoRa parameters)");
+    Serial.println("   - AT+RESET (reset module)");
+  #endif
+
   Serial.println("\n✓ Setup complete!\n");
 }
+
+// =============== MANUAL AT COMMAND HANDLER ================================
+#if ENABLE_MANUAL_AT_COMMANDS
+void handleManualATCommands() {
+  // Check if user typed something in Serial Monitor
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+
+    if (command.length() > 0) {
+      Serial.print("\n[AT] >> ");
+      Serial.println(command);
+
+      // Send command directly to LoRa module
+      String response = sendLoRaCommand(command, 2000);
+
+      Serial.print("[AT] << ");
+      if (response.length() > 0) {
+        Serial.println(response);
+      } else {
+        Serial.println("<no response>");
+      }
+    }
+  }
+}
+#endif
 
 // =============== LOOP ================================
 void loop() {
   // Check kill-switch every loop (highest priority!)
   checkKillSwitch();
 
-  // Debug: Confirm loop is running (only first 5 times)
-  static int loopCounter = 0;
-  if (loopCounter < 5) {
-    loopCounter++;
-    Serial.print("✓ Loop running (");
-    Serial.print(loopCounter);
-    Serial.println("/5)");
-  }
+  // Manual AT commands (for debugging LoRa module)
+  #if ENABLE_MANUAL_AT_COMMANDS
+  handleManualATCommands();
+  #endif
 
   // Spinner
   updateSpinner();
-  
-  // LED blink
-  if (millis() - timing.lastLED >= 500) {
-    timing.lastLED = millis();
-    local.ledState = !local.ledState;
-    digitalWrite(LED_PIN, local.ledState);
-    local.ledCount++;
-    if (local.ledCount >= 80) local.ledCount = 0;
-  }
-  
+
+  // LED is now synced with LoRa transmission/reception (removed independent blink)
+  // Sender: LED toggles when message sent
+  // Receiver: LED toggles when message received
+
   // Touch sensor
   if (millis() - timing.lastSensor >= 200) {
     timing.lastSensor = millis();
@@ -647,6 +667,12 @@ void loop() {
     if (receiveLoRaMessage(remote, payload)) {
       parsePayload(payload);
       remote.messageCount++;
+
+      // Toggle LED on message reception (synced with LoRa)
+      local.ledState = !local.ledState;
+      digitalWrite(LED_PIN, local.ledState);
+      local.ledCount++;
+      if (local.ledCount >= 80) local.ledCount = 0;
 
       // Update health monitoring
       updateRSSI(health, remote.rssi);
@@ -706,6 +732,12 @@ void loop() {
     // SENDER: Send every 2 seconds
     if (millis() - timing.lastSend >= 2000) {
       timing.lastSend = millis();
+
+      // Toggle LED on message transmission (synced with LoRa)
+      local.ledState = !local.ledState;
+      digitalWrite(LED_PIN, local.ledState);
+      local.ledCount++;
+      if (local.ledCount >= 80) local.ledCount = 0;
 
       // Include sequence number in payload
       String payload = "SEQ:" + String(local.sequenceNumber) +

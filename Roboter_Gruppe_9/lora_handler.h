@@ -17,9 +17,17 @@
 
   LoRa Parameters:
   - Spreading Factor: 12 (maximum range)
-  - Bandwidth: 125kHz
-  - Coding Rate: 4/5
+  - Bandwidth: 125kHz (BW7)
+  - Coding Rate: 4/5 (CR1)
   - Preamble: 4
+
+  SF12 Air Time (BW 125kHz):
+  - 10 bytes: ~1.3 seconds
+  - 20 bytes: ~2.0 seconds
+  - 34 bytes: ~2.6 seconds
+  - 36 bytes: ~2.8 seconds
+  - RYLR896 responds with +OK AFTER transmission completes!
+  - AT+SEND timeout must be > air time (4000ms for safety)
 =======================================================================*/
 
 #ifndef LORA_HANDLER_H
@@ -34,10 +42,12 @@ HardwareSerial LoRaSerial(1);
 
 // =============== AT COMMAND FUNCTION ================================
 inline String sendLoRaCommand(String command, int timeout = 500) {
-  LoRaSerial.println(command);
+  // Clear any pending data before sending command
+  while (LoRaSerial.available()) {
+    LoRaSerial.read();
+  }
 
-  Serial.print("[LoRa TX] ");
-  Serial.println(command);
+  LoRaSerial.println(command);
 
   unsigned long start = millis();
   String response = "";
@@ -51,12 +61,6 @@ inline String sendLoRaCommand(String command, int timeout = 500) {
   }
 
   response.trim();
-
-  if (response.length() > 0) {
-    Serial.print("[LoRa RX] ");
-    Serial.println(response);
-  }
-
   return response;
 }
 
@@ -92,43 +96,29 @@ inline void waitForReady(int timeout = 5000) {
 // =============== INITIALIZE LoRa ================================
 inline bool initLoRa(uint8_t myAddress, uint8_t networkID) {
   Serial.println("\n============================");
-  Serial.println("=== RYLR896 Init ===");
+  Serial.println("=== LoRa Init ===");
   Serial.println("============================");
 
   // Start serial connection
   LoRaSerial.begin(LORA_BAUDRATE, SERIAL_8N1, RXD2, TXD2);
-  delay(500);
+  delay(1000);
 
-  // Clear any old data
+  // Clear serial buffer
   while (LoRaSerial.available()) LoRaSerial.read();
 
-  // CRITICAL: Reset module first!
+  // Reset module
   Serial.println("Resetting module...");
-  sendLoRaCommand("AT+RESET", 1000);
+  String response = sendLoRaCommand("AT+RESET", 2000);
+  waitForReady(5000);
 
-  // Wait for READY signal
-  waitForReady(3000);
-
-  // Test communication
+  // Test connection
   Serial.println("Testing connection...");
-  String response = sendLoRaCommand("AT", 1000);
-
-  // Check for +OK (note the plus sign!)
-  if (response.indexOf("+OK") < 0 && response.indexOf("OK") < 0) {
-    Serial.println("❌ No response from module!");
-    Serial.print("Got: '");
-    Serial.print(response);
-    Serial.println("'");
-
-    // Try one more time
-    Serial.println("Retrying...");
-    delay(500);
-    response = sendLoRaCommand("AT", 1000);
-    if (response.indexOf("OK") < 0) {
-      return false;
-    }
+  response = sendLoRaCommand("AT", 1500);
+  if (response.indexOf("OK") < 0) {
+    Serial.println("❌ Module not responding!");
+    return false;
   }
-  Serial.println("✓ Connected");
+  Serial.println("✓ Module responding");
 
   // Get version
   response = sendLoRaCommand("AT+VER?", 1000);
@@ -171,17 +161,19 @@ inline bool initLoRa(uint8_t myAddress, uint8_t networkID) {
 
 // =============== SEND MESSAGE ================================
 inline bool sendLoRaMessage(String message, uint8_t targetAddress) {
-  String command = "AT+SEND=" + String(targetAddress) + "," + 
+  String command = "AT+SEND=" + String(targetAddress) + "," +
                    String(message.length()) + "," + message;
-  
-  String response = sendLoRaCommand(command, 2000);
-  
+
+  // SF12 is VERY slow! Air time for 36 bytes: ~2.8 seconds
+  // Must wait for +OK response AFTER message is transmitted
+  // Increased timeout: 2000ms → 4000ms for SF12 reliability
+  String response = sendLoRaCommand(command, 4000);
+
   if (response.indexOf("OK") >= 0) {
-    Serial.print("✓ Sent: ");
-    Serial.println(message);
     return true;
   } else {
-    Serial.println("❌ Send failed!");
+    Serial.print("❌ LoRa send failed: ");
+    Serial.println(message);
     return false;
   }
 }
@@ -210,12 +202,6 @@ inline bool receiveLoRaMessage(DeviceState& remote, String& payload) {
   
   // Check if it's a received message
   if (response.startsWith("+RCV=")) {
-    Serial.println("\n╔════════════════════════");
-    Serial.println("║ LoRa Message Received");
-    Serial.println("╠════════════════════════");
-    Serial.print("║ Raw: ");
-    Serial.println(response);
-
     // Parse: +RCV=sender,length,data,RSSI,SNR
     // NOTE: Data field may contain commas! Use length to parse correctly.
     int start = 5;  // Skip "+RCV="
@@ -243,16 +229,12 @@ inline bool receiveLoRaMessage(DeviceState& remote, String& payload) {
         remote.snr = snrStr.toInt();
         remote.lastMessageTime = millis();  // Update last message timestamp!
 
-        Serial.print("║ From: ");
-        Serial.println(sender);
-        Serial.print("║ Data: ");
-        Serial.println(payload);
-        Serial.print("║ RSSI: ");
+        Serial.print("📥 RX [");
+        Serial.print(payload);
+        Serial.print("] RSSI:");
         Serial.print(remote.rssi);
-        Serial.println(" dBm");
-        Serial.print("║ SNR:  ");
+        Serial.print(" SNR:");
         Serial.println(remote.snr);
-        Serial.println("╚════════════════════════");
 
         return true;
       }
