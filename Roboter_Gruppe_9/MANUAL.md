@@ -646,6 +646,153 @@ int fillWidth = (SIGNAL_BAR_W - 4) * quality / 100;
 tft.fillRect(SIGNAL_BAR_X + 2, SIGNAL_BAR_Y + 2, fillWidth, SIGNAL_BAR_H - 4, barColor);
 ```
 
+### Signal Testing Mode - Signaalitestausnäyttö
+
+**Tarkoitus:** Optimoitu näyttö LoRa-signaalin testaukseen ja analysointiin kenttäolosuhteissa.
+
+**Aktivointi:** `SIGNAL_TESTING_MODE true` (rivi 67 Roboter_Display_TFT.ino:ssa)
+
+#### Näytön ulkoasu (ASCII)
+
+```
+┌────────────────────────────────────────────────┐
+│ ROBOTER 9  ●        UART ON    PKT:142        │ ← Header (30px)
+│                       DATA ONLINE              │
+├────────────────────────────────────┬───────────┤
+│                                    │           │
+│  Aika:     12:34                   │           │
+│  Viime:    2s                      │    ███    │
+│  dB:       -67dBm                  │    ███    │
+│  SNR:      9dB                     │    ███    │
+│  RSSI:     -67dBm                  │    ███    │ ← Signaalipalkki
+│  SEQ:      142                     │    ███    │   (70-100% vihreä)
+│  Paketit:  142                     │    ███    │
+│  Häviöi:   0.7% (1/142)            │    ███    │
+│                                    │    ███    │
+│                                    │    ███    │
+│                                    │     76%   │
+├────────────────────────────────────┴───────────┤
+│ LoRa ONLINE          -67dBm | Addr:1 | RX     │ ← Footer (30px)
+└────────────────────────────────────────────────┘
+```
+
+#### Kenttien selitykset
+
+**Header-alue (yläosa):**
+
+| Kenttä | Kuvaus | Arvoalue |
+|--------|--------|----------|
+| **ROBOTER 9** | Projektin nimi | Kiinteä |
+| **● LED** | LED-indikaattori, synkronoitu LoRa-lähetysten kanssa | ● Punainen = ON, ○ Harmaa = OFF |
+| **UART ON/OFF** | UART-yhteyden tila displaylle | ON (vihreä) / OFF (punainen) |
+| **DATA ONLINE/WAITING** | Datan saapumisen tila | ONLINE (vihreä) / WAITING (harmaa) |
+| **PKT:n** | UART-pakettien määrä (vastaanotetut displayllä) | 0-∞ |
+
+**Data-alue (keskiosa):**
+
+| Kenttä | Kuvaus | Arvoalue | Tulkinta |
+|--------|--------|----------|----------|
+| **Aika** | Uptime-aikaleima (min:sek) | 0:00-∞ | Näyttää kuinka kauan laite ollut päällä |
+| **Viime** | Aika viimeisestä paketista | 0s-∞ | >5s → keltainen varoitus |
+| **dB** | RSSI (Received Signal Strength) | -40 to -120 dBm | Ks. RSSI-taulukko alla |
+| **SNR** | Signal-to-Noise Ratio | -20 to +20 dB | Ks. SNR-taulukko alla |
+| **RSSI** | RSSI-arvo (toisto) | Sama kuin dB | (duplikaatti, harkitse poistoa) |
+| **SEQ** | Sekvenssinnumero | 0-∞ | Jatkuva laskuri, käytetään pakettihäviön laskentaan |
+| **Paketit** | LoRa-paketit yhteensä (lähettäjältä) | 0-∞ | Odotetut paketit yhteensä |
+| **Häviöi** | Pakettihäviöprosentti (Lost/Expected) | 0.0%-100% | <2% vihreä, 2-10% oranssi, >10% punainen |
+
+**Signaalipalkki (oikea reuna):**
+
+| Väri | Signaalin laatu | Prosentti |
+|------|-----------------|-----------|
+| 🟢 Vihreä | Erinomainen | 70-100% |
+| 🟠 Oranssi | Keskinkertainen | 40-69% |
+| 🔴 Punainen | Heikko | 0-39% |
+
+Lasketaan: `quality = RSSI% (0-100) + SNR bonus (0-30%)`
+
+**Footer-alue (alaosa):**
+
+| Kenttä | Kuvaus | Arvoalue |
+|--------|--------|----------|
+| **LoRa ONLINE/OFFLINE** | LoRa-yhteyden tila | ONLINE (oranssi) / OFFLINE (harmaa) / LOST (harmaa) |
+| **dBm** | RSSI lyhyt muoto | -40 to -120 dBm |
+| **Addr** | LoRa-osoite (1=RX, 2=TX) | 1 tai 2 |
+| **RX/TX** | Laitteen rooli | RX (vastaanottaja) / TX (lähettäjä) |
+
+#### RSSI ja SNR tulkinta
+
+**RSSI (Received Signal Strength Indicator) - Vastaanotettu signaalin voimakkuus:**
+
+| RSSI (dBm) | Signaalin laatu | Etäisyysarvio (SF12) | Toimenpide |
+|------------|-----------------|----------------------|------------|
+| -40 to -60 | ⭐⭐⭐⭐⭐ Erinomainen | 0-10 m (erittäin lähellä) | Normaali toiminta |
+| -60 to -75 | ⭐⭐⭐⭐ Erittäin hyvä | 10-50 m | Normaali toiminta |
+| -75 to -85 | ⭐⭐⭐ Hyvä | 50-200 m | Normaali toiminta |
+| -85 to -95 | ⭐⭐ Kohtalainen | 200-500 m | Toimii, mutta voi häiriintyä |
+| -95 to -105 | ⭐ Heikko | 500-1000 m | Pakettihäviöitä, tarvitsee näköyhteyden |
+| -105 to -120 | ⚠️ Erittäin heikko | 1000+ m | Yhteys katkeaa pian, paranna olosuhteita |
+| < -120 | ❌ Ei yhteyttä | - | Ei yhteyttä, siirrä lähemmäs |
+
+**SNR (Signal-to-Noise Ratio) - Signaalin ja kohinan suhde:**
+
+| SNR (dB) | Signaalin laatu | Tulkinta | Toimenpide |
+|----------|-----------------|----------|------------|
+| +15 to +20 | ⭐⭐⭐⭐⭐ Erinomainen | Erittäin vähän kohinaa, selkeä signaali | Normaali toiminta |
+| +10 to +15 | ⭐⭐⭐⭐ Erittäin hyvä | Vähän kohinaa | Normaali toiminta |
+| +5 to +10 | ⭐⭐⭐ Hyvä | Kohtuullinen kohinataso | Normaali toiminta |
+| 0 to +5 | ⭐⭐ Kohtalainen | Signaali ja kohina lähellä toisiaan | Toimii, mutta herkempi häiriöille |
+| -5 to 0 | ⭐ Heikko | Kohina voimakkaampaa kuin signaali (LoRa demoduloi silti!) | Mahdollisia pakettihäviöitä |
+| -10 to -5 | ⚠️ Erittäin heikko | Paljon kohinaa, LoRa:n rajalla | Yhteys epävakaa |
+| < -10 | ❌ Kriittinen | Kohina peittää signaalin | Yhteys katkeaa pian |
+
+**LoRa-erikoisuus:** LoRa pystyy demoduloimaan signaaleja jopa SNR -20 dB saakka (signaali kohinan alapuolella), mikä tekee siitä erittäin suorituskykyisen pitkillä etäisyyksillä!
+
+**Signaalin laadun optimointi:**
+
+| Ongelma | RSSI | SNR | Todennäköinen syy | Ratkaisu |
+|---------|------|-----|-------------------|----------|
+| Heikko signaali | < -95 | Mikä tahansa | Liian pitkä etäisyys | Siirrä lähemmäs tai lisää TX-tehoa |
+| Voimakas kohina | Hyvä | < 0 | Sähkömagneettinen häiriö | Siirrä pois häiriölähteistä (WiFi, Bluetooth, teollisuuslaitteet) |
+| Epävakaa yhteys | Vaihtelee | Vaihtelee | Esteet, ilman kosteus | Varmista näköyhteys, testaa eri säissä |
+| Pakettihäviöitä | Hyvä | Hyvä | Ohjelmavirhe tai laitevika | Tarkista koodi ja LoRa-moduulin kytkennät |
+
+#### SEQ ja pakettihäviö
+
+**Sekvenssinnumero (SEQ):**
+- Jokaisessa lähetetyssä paketissa on jatkuva laskuri (0, 1, 2, 3, ...)
+- Vastaanottaja vertaa saapuneiden pakettien SEQ-numeroita
+- Jos SEQ hyppää (esim. 42 → 44), paketti 43 on kadonnut
+
+**Pakettihäviön laskenta:**
+
+```
+Häviöprosentti = (Menetetyt paketit / Odotetut paketit) × 100%
+
+Esim: Häviöi: 0.7% (1/142)
+→ 1 paketti kadonnut 142 odotetusta
+→ 0.7% häviöprosentti
+```
+
+**Pakettihäviön värikoodaus:**
+
+| Häviöprosentti | Väri | Tulkinta | Toimenpide |
+|----------------|------|----------|------------|
+| 0.0 - 2.0% | 🟢 Vihreä | Normaali, hyväksyttävä taso | Ei toimenpiteitä |
+| 2.1 - 10.0% | 🟠 Oranssi | Kohtalainen häiriö | Tarkista RSSI/SNR, poista esteitä |
+| > 10.0% | 🔴 Punainen | Vakava ongelma | Siirrä lähemmäs, tarkista kytkennät |
+
+**Huom:** Jopa 1-2% pakettihäviö on normaalia langattomissa verkoissa!
+
+**Debuggaus Serial Monitorilla:**
+
+Kun paketteja katoaa, display-ESP32:n Serial Monitor näyttää:
+```
+⚠️  Lost packets detected: 3 (SEQ 45 to 47)
+```
+
+Tämä auttaa tunnistamaan häiriöt reaaliajassa.
+
 #### 8. Päivitysvälin muokkaaminen
 
 **Näyttö päivittyy määrätyin väliajoin (rivi 76):**
