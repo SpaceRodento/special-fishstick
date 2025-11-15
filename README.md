@@ -55,14 +55,85 @@ Robot GND          ─────  Display GND
 │   └── Display_Device.ino
 ├── Robot_Sender/                ← Lähetin-esimerkkikoodi
 │   └── Robot_Sender.ino
-├── Roboter_Gruppe_9/            ← Täydellinen robottiprojekti
-│   ├── Display_Test_2in/        ← Ohjain 2" TFT-näytölle
-│   └── Robot_Control/           ← Robotin ohjauslogiikka
+├── Roboter_Gruppe_9/            ← Täydellinen robottiprojekti (LoRa-viestintä)
+│   ├── Roboter_Gruppe_9.ino     ← Pääohjelma (vastaanotin/lähettäjä)
+│   ├── config.h                 ← Konfiguraatio (anturit, LoRa-asetukset)
+│   └── *.h                      ← Moduulit (audio, battery, fire alarm jne.)
 ├── Roboter_Display_TFT/         ← Näyttökirjasto (valinnaisesti)
 │   ├── DisplayClient.h          ← Helppo integraatio
 │   └── DisplayServer.h
+├── data/                        ← 📊 DATAN LOGGAUS & ANALYSOINTI
+│   ├── README.md                ← Pika-aloitus data-analyysille
+│   ├── data_logger_extended.py  ← Kattava data-loggeri (suositeltu)
+│   ├── serial_monitor.py        ← Reaaliaikainen monitori
+│   ├── analyze_data.py          ← Analysoi ja visualisoi dataa
+│   ├── example_data_generator.py ← Luo testidata
+│   └── DATABASE_SCHEMA.md       ← Tietokantarakenne
 └── LIBRARIES.txt                ← Asennusohjeet kirjastoille
 ```
+
+## 📊 Datan loggaus ja analysointi
+
+ESP32-laitteet voivat lähettää telemetriadataa sarjaportin kautta tietokoneelle tai Raspberry Pi:lle tallennusta ja analysointia varten.
+
+### Mitä dataa kerätään?
+
+**Aina saatavilla (perustiedot):**
+- LoRa-metriikat: RSSI (signaalin voimakkuus), SNR, pakettihukka
+- I/O-tilat: LED, kosketusanturi
+- Aikaleima ja ESP32:n käyttöaika
+
+**Valinnaiset anturit** (jos konfiguroitu):
+- 🔋 **Akku**: Jännite, varaus %, tila (GPIO 35 tai INA219)
+- ⚡ **Virta**: mA, teho (mW), energiankulutus (mAh) - INA219 I2C
+- 🖥️ **Järjestelmä**: Heap-muisti, CPU-lämpötila, loop-taajuus
+- 🔥 **Palohälytys**: Äänitunnistus (3 kHz piippaus) + LED-välähdykset
+- 📡 **LoRa-edistyneet**: Spreading factor, TX teho, uudelleenyritykset
+
+### Pika-aloitus
+
+**1. Aktivoi CSV-tuloste ESP32:ssä**
+
+Muokkaa `Roboter_Gruppe_9/config.h`:
+```cpp
+#define ENABLE_CSV_OUTPUT true           // Aktivoi data-loggaus
+#define DATA_OUTPUT_INTERVAL 2000        // Logataan joka 2. sekunti
+```
+
+**2. Käynnistä loggaus**
+```bash
+# Yhdistä ESP32 USB-kaapelilla tietokoneeseen
+python data/data_logger_extended.py /dev/ttyUSB0 115200 mittaus.db
+```
+
+**3. Analysoi tulokset**
+```bash
+python data/analyze_data.py mittaus.db
+```
+
+Luo automaattisesti:
+- Signaalin laatukaaviot (RSSI, SNR ajassa)
+- Pakettihäviötilastot
+- Akun purkautumiskäyrät
+- Palohälytysten aikajana
+- Järjestelmän suorituskykymetriikat
+
+### Testaus ilman laitteita
+
+Luo realistista testidata:
+```bash
+python data/example_data_generator.py 60 testi_1h.db    # 1 tunti dataa
+python data/analyze_data.py testi_1h.db
+```
+
+### Lisätietoa
+
+Katso **`data/README.md`** - täydellinen ohje data-analyysille:
+- Yksityiskohtaiset ohjeet
+- Tietokannan rakenne
+- SQL-kyselyesimerkit
+- Vianmääritys
+- Python-skriptien käyttö
 
 ## Tekniset tiedot
 

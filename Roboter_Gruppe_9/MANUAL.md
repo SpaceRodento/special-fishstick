@@ -359,6 +359,364 @@ Oikeassa reunassa näkyy pystysuora palkki:
 
 Lasketaan RSSI:n ja SNR:n perusteella.
 
+### TFT-näytön muokkaaminen
+
+**Tiedosto:** `Roboter_Display_TFT/Roboter_Display_TFT.ino`
+
+Tämä osio opastaa miten voit muokata TFT-näytön ulkoasua ja sisältöä.
+
+#### 1. Layoutin rakenne ja koordinaatit
+
+Näyttö on 320×240 pikseliä (landscape-tila). Layout on määritelty riveillä 141-180.
+
+**Kolme pääaluetta:**
+
+```cpp
+// ┌────────────────────────────────────────┐
+// │  YLÄ-OSA (Header) - 30px               │  Otsikko, LED, yhteys
+// ├──────────────────┬─────────────────────┤
+// │                  │                     │
+// │  VASEN SARAKE    │   OIKEA SARAKE      │  Data jaettu kahtia
+// │  - Aikaleima     │   - RSSI, SNR       │
+// │  - Paketit       │   - Pakettihäviö    │  + Signaalipalkki
+// │  - Aika viime    │   - Laatuprosentti  │    oikealla
+// │                  │                     │
+// │  KESKI-OSA (Data) - 150px              │
+// ├────────────────────────────────────────┤
+// │  ALA-OSA (Footer) - 60px               │  LoRa ONLINE + tiedot
+// │  LoRa ONLINE                           │
+// │  -85dBm | Addr:1 | RX                  │
+// └────────────────────────────────────────┘
+```
+
+**Muokattavat koordinaatit (rivit 160-180):**
+
+```cpp
+// Ylä-osa (Header)
+#define HEADER_Y        0        // Y-koordinaatti
+#define HEADER_H        30       // Korkeus pikseleinä
+
+// Keski-osa (Data) - jaettu vasempaan ja oikeaan
+#define DATA_Y          30       // Alkaa headerin jälkeen
+#define DATA_H          150      // Korkeus
+#define DATA_LEFT_X     10       // Vasen sarake alkaa
+#define DATA_LEFT_W     130      // Vasen sarake leveys
+#define DATA_RIGHT_X    150      // Oikea sarake alkaa
+#define DATA_RIGHT_W    120      // Oikea sarake leveys
+
+// Ala-osa (Footer)
+#define FOOTER_Y        180      // Alkaa datan jälkeen
+#define FOOTER_H        60       // Korkeus
+
+// Signaalipalkki (oikeassa reunassa)
+#define SIGNAL_BAR_X    280      // X-koordinaatti
+#define SIGNAL_BAR_Y    (DATA_Y + 10)
+#define SIGNAL_BAR_W    30       // Leveys
+#define SIGNAL_BAR_H    (DATA_H - 20)
+```
+
+**Esimerkki 1: Suurempi header**
+```cpp
+#define HEADER_H        50       // Oli 30 → nyt 50
+#define DATA_Y          50       // Päivitä tämäkin!
+```
+
+**Esimerkki 2: Leveämpi vasen sarake**
+```cpp
+#define DATA_LEFT_W     180      // Oli 130 → nyt 180
+#define DATA_RIGHT_X    200      // Siirrä oikeaa vastaavasti
+```
+
+#### 2. Värien muokkaaminen
+
+**Värit määritellään RGB565-formaatissa** (rivit 79-103). RGB565 on 16-bittinen värimuoto.
+
+**Värimuunnin:** https://rgbcolorpicker.com/565
+
+**Perusvärit:**
+```cpp
+#define COLOR_BG           0x0000    // Musta tausta
+#define COLOR_PRIMARY      0x001F    // Sininen (pääväri, header)
+#define COLOR_SECONDARY    0xFD20    // Oranssi (toissijainen)
+#define COLOR_TEXT_PRIMARY 0xFFFF    // Valkoinen teksti
+#define COLOR_TEXT_SECONDARY 0x8410  // Harmaa teksti (labelit)
+```
+
+**Tilaindikaattorit:**
+```cpp
+#define COLOR_SUCCESS      0x07E0    // Vihreä (hyvä signaali)
+#define COLOR_WARNING      0xFD20    // Oranssi (varoitus)
+#define COLOR_ERROR        0xF800    // Punainen (virhe)
+```
+
+**Esimerkki 1: Sinisen headerin sijaan violetti**
+```cpp
+#define COLOR_PRIMARY      0x781F    // Violetti (R=15, G=0, B=31)
+```
+
+**Esimerkki 2: Tummansininen tausta valkoisensijaan musta**
+```cpp
+#define COLOR_BG           0x0010    // Tummansininen (R=0, G=2, B=0)
+```
+
+**RGB565-laskenta:**
+- **Punainen (R):** 5 bittiä (0-31) → kerro 2048
+- **Vihreä (G):** 6 bittiä (0-63) → kerro 32
+- **Sininen (B):** 5 bittiä (0-31) → kerro 1
+- **Esim. oranssi:** R=31, G=20, B=0 → (31×2048) + (20×32) + 0 = 0xFD20
+
+#### 3. Fonttikoot
+
+**Fontit määritellään riveillä 69-73:**
+
+```cpp
+#define FONT_SMALL 1     // Pienet tiedot, labelit (8px korkeus)
+#define FONT_NORMAL 2    // Pääteksti, luettava data (16px)
+#define FONT_LARGE 4     // Isot numerot, otsikot (32px)
+```
+
+Numerot ovat **kertoimen arvoja**. LovyanGFX skaalaa perusfontin:
+- `1` = 8×8 pikseliä
+- `2` = 16×16 pikseliä
+- `4` = 32×32 pikseliä
+- `6` = 48×48 pikseliä (käytä isoille numeroille!)
+
+**Esimerkki: Suurempi RSSI-numero**
+
+Muokkaa funktiota `drawData()` (rivi 577):
+```cpp
+// RSSI (FONT_LARGE - iso numero)
+tft.setTextSize(6);           // Oli FONT_LARGE (4) → nyt 6
+tft.setTextColor(COLOR_TEXT_PRIMARY);
+String rssiValue = rssiStr.length() > 0 ? rssiStr.substring(0, rssiStr.indexOf("d")) : "-";
+tft.drawString(rssiValue, rightX, rightY);
+```
+
+#### 4. Elementtien sijainnin muokkaaminen
+
+**Funktiot jotka piirtävät näytön:**
+- `drawHeader()` (rivit 452-502) - Yläosa
+- `drawData()` (rivit 504-617) - Keskiosa
+- `drawSignalQualityBar()` (rivit 619-660) - Signaalipalkki
+- `drawAlert()` (rivit 662-737) - Alaosa (footer)
+
+**Esimerkki: Siirrä LED-indikaattori oikealle**
+
+Muokkaa funktiota `drawHeader()` (rivi 465):
+```cpp
+int ledX = 250;  // Oli 120 → nyt oikealla puolella
+int ledY = HEADER_Y + 15;
+```
+
+**Esimerkki: Lisää uusi kenttä vasempaan sarakkeeseen**
+
+Muokkaa funktiota `drawData()` (rivi 570 jälkeen):
+```cpp
+// Sekvenssinnumero (FONT_SMALL)
+tft.setTextSize(FONT_SMALL);
+tft.setTextColor(COLOR_LABEL);
+tft.drawString("SEQ:", leftX, leftY);
+tft.setTextColor(COLOR_TEXT_PRIMARY);
+tft.drawString(seqStr.length() > 0 ? seqStr : "-", leftX + 35, leftY);
+leftY += 18;
+
+// *** UUSI KENTTÄ: Lämpötila ***
+String tempStr = getFieldValue("TEMP");
+tft.setTextColor(COLOR_LABEL);
+tft.drawString("Temp:", leftX, leftY);
+tft.setTextColor(COLOR_TEXT_PRIMARY);
+tft.drawString(tempStr.length() > 0 ? tempStr + "C" : "-", leftX + 45, leftY);
+leftY += 18;
+```
+
+#### 5. LovyanGFX-peruskomennot
+
+**Piirtokomennot:**
+
+```cpp
+// Tekstin piirtäminen
+tft.drawString("Teksti", x, y);           // Piirrä teksti koordinaatteihin
+tft.setTextSize(2);                       // Aseta fonttikoko (1-6)
+tft.setTextColor(COLOR_TEXT);             // Aseta tekstin väri
+tft.setTextColor(COLOR_TEXT, COLOR_BG);   // Teksti + taustaväri
+
+// Tekstin tasaus (datum)
+tft.setTextDatum(TL_DATUM);  // Top-Left (vasen ylä)
+tft.setTextDatum(TC_DATUM);  // Top-Center (keskellä ylä)
+tft.setTextDatum(TR_DATUM);  // Top-Right (oikea ylä)
+tft.setTextDatum(MC_DATUM);  // Middle-Center (keskellä)
+
+// Suorakulmiot
+tft.fillRect(x, y, leveys, korkeus, väri);    // Täytetty suorakulmio
+tft.drawRect(x, y, leveys, korkeus, väri);    // Reunaviiva
+
+// Ympyrät
+tft.fillCircle(x, y, säde, väri);             // Täytetty ympyrä
+tft.drawCircle(x, y, säde, väri);             // Ympyränreuna
+
+// Viivat
+tft.drawLine(x1, y1, x2, y2, väri);           // Suora viiva
+
+// Näytön tyhjennys
+tft.fillScreen(COLOR_BG);                     // Tyhjennä koko näyttö
+```
+
+**Esimerkki: Piirrä laatikko RSSI:n ympärille**
+
+Muokkaa funktiota `drawData()` (rivi 577):
+```cpp
+// Piirrä laatikko RSSI:n taakse
+tft.drawRect(rightX - 5, rightY - 5, 100, 45, COLOR_PRIMARY);
+
+// RSSI (FONT_LARGE - iso numero)
+tft.setTextSize(FONT_LARGE);
+tft.setTextColor(COLOR_TEXT_PRIMARY);
+String rssiValue = rssiStr.length() > 0 ? rssiStr.substring(0, rssiStr.indexOf("d")) : "-";
+tft.drawString(rssiValue, rightX, rightY);
+```
+
+#### 6. Uusien kenttien lisääminen
+
+Voit vastaanottaa mitä tahansa CSV-kenttiä robotilta ja näyttää ne.
+
+**Vaihe 1: Lähetä data robotilta**
+
+Muokkaa `display_sender.h` tai `DisplayClient` -kirjastoa:
+```cpp
+display.set("TEMP", 25);    // Lämpötila
+display.set("HUM", 60);     // Kosteus
+display.send();
+```
+
+**Vaihe 2: Hae arvo näytöllä**
+
+Käytä funktiota `getFieldValue()`:
+```cpp
+String tempStr = getFieldValue("TEMP");
+String humStr = getFieldValue("HUM");
+```
+
+**Vaihe 3: Piirrä näytölle**
+
+Lisää funktioon `drawData()`:
+```cpp
+tft.setTextSize(FONT_NORMAL);
+tft.setTextColor(COLOR_LABEL);
+tft.drawString("Temp:", leftX, leftY);
+tft.setTextColor(COLOR_TEXT_PRIMARY);
+tft.drawString(tempStr + "C", leftX + 60, leftY);
+leftY += 25;
+```
+
+#### 7. Signaalin laatupalkin muokkaaminen
+
+**Signaalipalkki piirretään funktiossa `drawSignalQualityBar()` (rivit 619-660).**
+
+**Esimerkki 1: Leveämpi palkki**
+```cpp
+#define SIGNAL_BAR_W    50       // Oli 30 → nyt 50
+#define SIGNAL_BAR_X    270      // Siirrä vasemmalle (oli 280)
+```
+
+**Esimerkki 2: Muuta värirajoja**
+
+Muokkaa funktiota `getSignalQualityColor()` (rivi 199):
+```cpp
+uint16_t getSignalQualityColor(int quality) {
+  if (quality >= 80) return COLOR_GOOD;   // Oli 70 → nyt 80
+  if (quality >= 50) return COLOR_WARN;   // Oli 40 → nyt 50
+  return COLOR_BAD;
+}
+```
+
+**Esimerkki 3: Vaakasuora palkki**
+
+Muokkaa koordinaatit:
+```cpp
+#define SIGNAL_BAR_X    10       // Vasen reuna
+#define SIGNAL_BAR_Y    220      // Alaosa
+#define SIGNAL_BAR_W    300      // Lähes koko leveys
+#define SIGNAL_BAR_H    15       // Matala
+```
+
+Muokkaa piirtokoodi (rivi 643):
+```cpp
+// Piirrä täyttö vasemmalta oikealle (ei alhaalta ylös)
+int fillWidth = (SIGNAL_BAR_W - 4) * quality / 100;
+tft.fillRect(SIGNAL_BAR_X + 2, SIGNAL_BAR_Y + 2, fillWidth, SIGNAL_BAR_H - 4, barColor);
+```
+
+#### 8. Päivitysvälin muokkaaminen
+
+**Näyttö päivittyy määrätyin väliajoin (rivi 76):**
+
+```cpp
+#define DISPLAY_UPDATE_INTERVAL 500     // Päivitys 500ms välein
+```
+
+**Nopea päivitys (200ms):**
+```cpp
+#define DISPLAY_UPDATE_INTERVAL 200
+```
+
+**Hidas päivitys (1000ms):**
+```cpp
+#define DISPLAY_UPDATE_INTERVAL 1000
+```
+
+**HUOM:** Liian nopea päivitys (alle 100ms) voi aiheuttaa välkkymistä!
+
+#### 9. Vinkkejä muokkaamiseen
+
+**1. Testaa pienin muutoksin**
+- Muuta yksi asia kerrallaan
+- Käännä ja lataa koodi
+- Tarkista näyttö
+
+**2. Kommentoi vanha koodi**
+```cpp
+// int ledX = 120;  // Vanha sijainti
+int ledX = 250;     // Uusi sijainti
+```
+
+**3. Käytä Serial-tulosteita debuggaukseen**
+```cpp
+Serial.print("RSSI value: ");
+Serial.println(rssiValue);
+```
+
+**4. Piirrä reunat alueiden havaitsemiseksi**
+```cpp
+tft.drawRect(DATA_LEFT_X, DATA_Y, DATA_LEFT_W, DATA_H, COLOR_WARN);  // Vasen laatikko
+tft.drawRect(DATA_RIGHT_X, DATA_Y, DATA_RIGHT_W, DATA_H, COLOR_GOOD); // Oikea laatikko
+```
+
+**5. Käytä väliaikaisia testejä**
+```cpp
+// Testaa tekstin sijaintia
+tft.fillCircle(rightX, rightY, 3, COLOR_ERROR);  // Piirrä piste koordinaatteihin
+```
+
+#### 10. Yleisiä ongelmia
+
+**Teksti ei näy:**
+- Tarkista että tekstiväri ei ole sama kuin tausta
+- Varmista että koordinaatit ovat näytön sisällä (0-320, 0-240)
+- Tarkista että `tft.setTextSize()` on asetettu
+
+**Elementit menevät päällekkäin:**
+- Tarkista koordinaatit ja leveydet
+- Varmista että `leftY += 25;` kasvattaa y-koordinaattia riittävästi
+
+**Näyttö vilkkuu:**
+- Älä piirrä elementtejä joka silmukassa
+- Käytä `DISPLAY_UPDATE_INTERVAL` rajoittamaan päivityksiä
+- Piirrä vain muuttuneet osat (älä koko näyttöä)
+
+**Värit näyttävät vääriltä:**
+- Käytä RGB565-muunninta: https://rgbcolorpicker.com/565
+- Muista 0x-etuliite heksaluvuille (esim. 0xFFFF)
+
 ---
 
 ## PC-datan Tallennus
