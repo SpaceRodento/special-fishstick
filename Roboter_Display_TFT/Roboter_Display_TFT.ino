@@ -530,75 +530,63 @@ void drawData() {
   String timeSinceStr = String(timeSinceLastPacket) + "s";
 
   // ═══════════════════════════════════════════════════════════
-  // VASEN SARAKE - Aikaleima, paketit, aika viimeisestä
+  // YKSI SARAKE - Kaikki asiat peräkkäin omilla riveillään
   // ═══════════════════════════════════════════════════════════
   tft.setTextDatum(TL_DATUM);
-  int leftX = DATA_LEFT_X;
-  int leftY = DATA_Y + 15;
-  int lineHeight = 25;
+  tft.setTextSize(FONT_NORMAL);  // Kaikki normaalifontilla
 
-  // Aikaleima (FONT_NORMAL)
-  tft.setTextSize(FONT_NORMAL);
+  int x = DATA_LEFT_X;
+  int y = DATA_Y + 10;
+  int lineHeight = 20;
+
+  // Aikaleima
   tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Aika:", leftX, leftY);
+  tft.drawString("Aika:", x, y);
   tft.setTextColor(COLOR_TEXT_PRIMARY);
-  tft.drawString(currentTimestamp, leftX + 70, leftY);
-  leftY += lineHeight;
+  tft.drawString(currentTimestamp, x + 100, y);
+  y += lineHeight;
 
-  // Paketit (FONT_NORMAL)
+  // Paketit
   tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Paketit:", leftX, leftY);
+  tft.drawString("Paketit:", x, y);
   tft.setTextColor(COLOR_TEXT_PRIMARY);
   String pktsStr = loraPkts.length() > 0 ? loraPkts : "0";
-  tft.drawString(pktsStr, leftX + 70, leftY);
-  leftY += lineHeight;
+  tft.drawString(pktsStr, x + 100, y);
+  y += lineHeight;
 
-  // Sekvenssinnumero (FONT_SMALL)
-  tft.setTextSize(FONT_SMALL);
+  // Sekvenssinnumero
   tft.setTextColor(COLOR_LABEL);
-  tft.drawString("SEQ:", leftX, leftY);
+  tft.drawString("SEQ:", x, y);
   tft.setTextColor(COLOR_TEXT_PRIMARY);
-  tft.drawString(seqStr.length() > 0 ? seqStr : "-", leftX + 35, leftY);
-  leftY += 18;
+  tft.drawString(seqStr.length() > 0 ? seqStr : "-", x + 100, y);
+  y += lineHeight;
 
-  // Aika viime paketista (FONT_SMALL)
+  // Aika viime paketista
   tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Viime:", leftX, leftY);
+  tft.drawString("Viime:", x, y);
   tft.setTextColor(timeSinceLastPacket > 5 ? COLOR_WARNING : COLOR_TEXT_PRIMARY);
-  tft.drawString(timeSinceStr, leftX + 40, leftY);
-  leftY += 18;
+  tft.drawString(timeSinceStr, x + 100, y);
+  y += lineHeight;
 
-  // ═══════════════════════════════════════════════════════════
-  // OIKEA SARAKE - RSSI, SNR, pakettihäviö
-  // ═══════════════════════════════════════════════════════════
-  int rightX = DATA_RIGHT_X;
-  int rightY = DATA_Y + 15;
-
-  // RSSI (FONT_LARGE - iso numero)
-  tft.setTextSize(FONT_LARGE);
+  // RSSI
+  tft.setTextColor(COLOR_LABEL);
+  tft.drawString("RSSI:", x, y);
   tft.setTextColor(COLOR_TEXT_PRIMARY);
-  String rssiValue = rssiStr.length() > 0 ? rssiStr.substring(0, rssiStr.indexOf("d")) : "-";
-  tft.drawString(rssiValue, rightX, rightY);
+  String rssiValue = rssiStr.length() > 0 ? rssiStr : "-";
+  tft.drawString(rssiValue, x + 100, y);
+  y += lineHeight;
 
-  // dBm (FONT_SMALL - pieni yksikkö)
-  tft.setTextSize(FONT_SMALL);
+  // SNR
   tft.setTextColor(COLOR_LABEL);
-  tft.drawString("dBm", rightX + 55, rightY + 20);
-  rightY += 50;
-
-  // SNR (FONT_NORMAL)
-  tft.setTextSize(FONT_NORMAL);
-  tft.setTextColor(COLOR_LABEL);
-  tft.drawString("SNR:", rightX, rightY);
+  tft.drawString("SNR:", x, y);
   tft.setTextColor(COLOR_TEXT_PRIMARY);
   String snrValue = snrStr.length() > 0 ? snrStr : "-";
-  tft.drawString(snrValue, rightX + 50, rightY);
-  rightY += 25;
+  tft.drawString(snrValue, x + 100, y);
+  y += lineHeight;
 
-  // Pakettihäviö (FONT_SMALL)
-  tft.setTextSize(FONT_SMALL);
+  // Pakettihäviö
   tft.setTextColor(COLOR_LABEL);
-  tft.drawString("Havioi:", rightX, rightY);
+  tft.drawString("Havioi:", x, y);
 
   // Väritä pakettihäviöprosentti
   uint16_t lossColor = COLOR_SUCCESS;
@@ -607,13 +595,12 @@ void drawData() {
 
   tft.setTextColor(lossColor);
   String lossStr = String(packetLossPercent, 1) + "%";
-  tft.drawString(lossStr, rightX + 45, rightY);
-  rightY += 18;
+  tft.drawString(lossStr, x + 100, y);
 
-  // Menetetyt paketit (FONT_SMALL)
+  // Menetetyt paketit samalle riville
   tft.setTextColor(COLOR_LABEL);
-  String lostPacketsStr = "(" + String(totalPacketsLost) + "/" + String(totalPacketsExpected) + ")";
-  tft.drawString(lostPacketsStr, rightX, rightY);
+  String lostPacketsStr = " (" + String(totalPacketsLost) + "/" + String(totalPacketsExpected) + ")";
+  tft.drawString(lostPacketsStr, x + 150, y);
 }
 
 void drawSignalQualityBar() {
@@ -704,34 +691,32 @@ void drawAlert() {
   tft.fillRect(0, FOOTER_Y, TFT_WIDTH, FOOTER_H, bgColor);
 
   // ═══════════════════════════════════════════════════════════
-  // YLÄ RIVI: LoRa ONLINE/OFFLINE (FONT_LARGE)
+  // VASEN PUOLI: LoRa ONLINE/OFFLINE (FONT_NORMAL)
   // ═══════════════════════════════════════════════════════════
   tft.setTextDatum(TL_DATUM);
-  tft.setTextSize(FONT_LARGE);
+  tft.setTextSize(FONT_NORMAL);
   tft.setTextColor(COLOR_TEXT_PRIMARY);
 
   int x = 10;
-  int y = FOOTER_Y + 5;
+  int y = FOOTER_Y + 10;
 
   tft.drawString(statusText, x, y);
 
   // ═══════════════════════════════════════════════════════════
-  // ALA RIVI: Pienellä fontilla dBm, address, rooli (FONT_SMALL)
+  // OIKEA PUOLI: Pikkutekstit kahdella rivillä (FONT_SMALL)
   // ═══════════════════════════════════════════════════════════
+  tft.setTextDatum(TR_DATUM);  // Oikea tasaus
   tft.setTextSize(FONT_SMALL);
   tft.setTextColor(COLOR_TEXT_PRIMARY);
 
-  x = 10;
-  y = FOOTER_Y + 40;
+  int rightX = TFT_WIDTH - 10;
+  int rightY = FOOTER_Y + 10;
 
-  // dBm
-  String detailsLine = rssiValue + "dBm";
+  // Ensimmäinen rivi oikealla: dBm + Address
+  String line1 = rssiValue + "dBm | Addr:" + address;
+  tft.drawString(line1, rightX, rightY);
 
-  // Address
-  detailsLine += " | Addr:" + address;
-
-  // Rooli
-  detailsLine += " | " + role;
-
-  tft.drawString(detailsLine, x, y);
+  // Toinen rivi oikealla: Rooli
+  rightY += 12;
+  tft.drawString(role, rightX, rightY);
 }
