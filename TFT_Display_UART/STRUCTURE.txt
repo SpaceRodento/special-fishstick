@@ -1,0 +1,56 @@
+TFT_Display_UART/
+│
+├── README.md                          Main documentation and quick start guide
+│
+├── DisplayDevice/                     DISPLAY SIDE - Upload to ESP32-2432S022
+│   ├── DisplayDevice.ino              Main display program (landscape mode)
+│   ├── display_config.h               LovyanGFX configuration for ST7789 TFT
+│   └── README.md                      Display device setup guide
+│
+├── SenderLibrary/                     SENDER SIDE - Copy to your project
+│   ├── DisplayClient.h                Library for sending data to display
+│   └── README.md                      Library API documentation
+│
+└── examples/                          EXAMPLE PROJECTS - Ready to use
+    │
+    ├── 01_Basic/                      Simplest example
+    │   ├── Basic.ino                  Counter + uptime
+    │   └── DisplayClient.h            (Library copy)
+    │
+    ├── 02_Sensors/                    Sensor data example
+    │   ├── Sensors.ino                Temperature, humidity, light
+    │   └── DisplayClient.h            (Library copy)
+    │
+    └── 03_Advanced/                   Advanced features
+        ├── Advanced.ino               System metrics, LED, alerts
+        └── DisplayClient.h            (Library copy)
+
+Total Files: 14
+- 6 Arduino sketches (.ino)
+- 5 Headers (.h)
+- 5 Documentation (README.md)
+
+USAGE:
+======
+
+1. DISPLAY DEVICE:
+   - Open DisplayDevice/DisplayDevice.ino in Arduino IDE
+   - Install LovyanGFX library
+   - Upload to ESP32-2432S022
+
+2. SENDER DEVICE:
+   - Choose an example (01_Basic recommended for testing)
+   - OR copy DisplayClient.h to your own project
+   - Wire: TX → Display GPIO 3, GND → GND
+   - Upload and enjoy!
+
+FEATURES:
+=========
+✅ Universal - No project-specific code
+✅ 2-wire connection (TX + GND)
+✅ Color-coded UI (green/orange/red)
+✅ Alert system
+✅ Uptime tracking
+✅ CSV protocol
+✅ Easy API
+✅ Multiple examples
